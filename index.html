@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="22" fill="#191F28"></rect>
+    <path d="M26 64 L40 50 L52 58 L74 34" fill="none" stroke="#F04452" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <circle cx="74" cy="34" r="5" fill="#fff" stroke="#F04452" stroke-width="3.5"></circle>
+    <circle cx="26" cy="64" r="5" fill="#fff" stroke="#8B95A1" stroke-width="3.5"></circle>
+  </svg>
+</template>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+  input, textarea, button { font-family: inherit; }
+  input::placeholder, textarea::placeholder { color: #B0B8C1; }
+  input:focus, textarea:focus { outline: none; border-color: #3182F6 !important; }
+  @keyframes scFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F2F4F6;color:#191F28;">
+  <div style="max-width:940px;margin:0 auto;padding:28px 20px 90px;">
+
+    <!-- header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:42px;height:42px;border-radius:13px;background:#191F28;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;letter-spacing:-0.04em;">수</div>
+        <div>
+          <div style="font-size:19px;font-weight:800;letter-spacing:-0.03em;">수익노트</div>
+          <div style="font-size:12.5px;color:#8B95A1;margin-top:1px;">삼성증권 매매 일지 · 건별 손익 추적</div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:#8B95A1;font-weight:600;background:#fff;padding:8px 14px;border-radius:10px;">{{ stats.countLabel }}</div>
+    </div>
+
+    <!-- dashboard -->
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:26px;">
+      <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size:13px;color:#8B95A1;font-weight:600;margin-bottom:8px;">누적 실현손익</div>
+        <div style="display:flex;align-items:baseline;gap:10px;">
+          <div style="font-size:33px;font-weight:800;letter-spacing:-0.035em;color: {{ stats.pnlColor }};">{{ stats.totalPnlLabel }}</div>
+          <div style="font-size:15px;font-weight:700;color: {{ stats.pnlColor }};">{{ stats.cumRetLabel }}</div>
+        </div>
+        <div style="margin-top:18px;"><canvas data-eq="1" style="width:100%;height:90px;display:block;"></canvas></div>
+        <div style="font-size:11.5px;color:#B0B8C1;margin-top:4px;text-align:right;">누적 손익 추이</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">승률</div>
+          <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;">{{ stats.winRateLabel }}</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">{{ stats.winLossLabel }}</div>
+        </div>
+        <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">평균 수익률</div>
+          <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;color: {{ stats.avgRetColor }};">{{ stats.avgRetLabel }}</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">건당 평균</div>
+        </div>
+        <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">총 투자금</div>
+          <div style="font-size:20px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;">{{ stats.investedLabel }}</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">누적 매수금액</div>
+        </div>
+        <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">평균 보유</div>
+          <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;">{{ stats.avgHoldLabel }}</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">매수 → 매도</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- tabs -->
+    <div style="display:inline-flex;gap:4px;background:#E8EBEE;padding:5px;border-radius:13px;margin-bottom:18px;">
+      <sc-for list="{{ tabList }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.onClick }}" style="border:none;cursor:pointer;padding:9px 18px;border-radius:9px;font-size:14px;font-weight:700;background: {{ tb.bg }};color: {{ tb.color }};box-shadow: {{ tb.shadow }};transition:all .15s;">{{ tb.label }}</button>
+      </sc-for>
+    </div>
+
+    <!-- LIST VIEW -->
+    <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <sc-for list="{{ chips }}" as="c" hint-placeholder-count="5">
+            <button onClick="{{ c.onClick }}" style="cursor:pointer;padding:7px 14px;border-radius:18px;font-size:13px;font-weight:600;background: {{ c.bg }};color: {{ c.color }};border:1px solid {{ c.border }};">{{ c.label }}</button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ hasTrades }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <sc-for list="{{ visibleTrades }}" as="t" hint-placeholder-count="5">
+              <div style="background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;">
+                <div onClick="{{ t.onToggle }}" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;" style-hover="background:#FAFBFC;">
+                  <div style="flex:0 0 auto;min-width:118px;">
+                    <div style="font-size:15px;font-weight:700;letter-spacing:-0.02em;">{{ t.name }}</div>
+                    <div style="font-size:12px;color:#8B95A1;margin-top:3px;">{{ t.qtyLabel }} · 보유 {{ t.holdLabel }}</div>
+                  </div>
+                  <div style="flex:1;display:flex;align-items:center;gap:8px;font-size:13.5px;">
+                    <span style="color:#8B95A1;">{{ t.buyPriceLabel }}</span>
+                    <span style="color:#C4C9CF;font-size:12px;">→</span>
+                    <span style="font-weight:600;color:#4E5968;">{{ t.sellPriceLabel }}</span>
+                  </div>
+                  <div style="flex:0 0 auto;text-align:right;min-width:92px;">
+                    <div style="font-size:15.5px;font-weight:800;letter-spacing:-0.02em;color: {{ t.color }};">{{ t.retLabel }}</div>
+                    <div style="font-size:12px;font-weight:600;color: {{ t.color }};margin-top:2px;">{{ t.pnlLabel }}</div>
+                  </div>
+                  <div style="flex:0 0 auto;font-size:12px;color:#8B95A1;min-width:42px;text-align:right;">{{ t.sellDateLabel }}</div>
+                </div>
+                <sc-if value="{{ t.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:6px 18px 20px;border-top:1px solid #F2F4F6;">
+                    <canvas data-trade="{{ t.id }}" style="width:100%;height:240px;display:block;"></canvas>
+                    <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap;">
+                      <div><div style="font-size:11px;color:#8B95A1;">매수</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.buyDate }} · {{ t.buyPriceLabel }}원</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">매도</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.sellDate }} · {{ t.sellPriceLabel }}원</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">투자금</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.investedLabel }}</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">실현손익</div><div style="font-size:13px;font-weight:700;margin-top:3px;color: {{ t.color }};">{{ t.pnlLabel }}</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">보유기간</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.holdLabel }}</div></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:16px;">
+                      <sc-if value="{{ t.memo }}" hint-placeholder-val="메모">
+                        <span style="font-size:13px;color:#4E5968;background:#F2F4F6;padding:8px 12px;border-radius:9px;">{{ t.memoLabel }}</span>
+                      </sc-if>
+                      <button onClick="{{ t.onDelete }}" style="border:none;background:none;color:#B0B8C1;font-size:13px;cursor:pointer;margin-left:auto;">건 삭제</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noTrades }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border-radius:16px;padding:54px 20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="font-size:15px;font-weight:700;color:#4E5968;">아직 기록된 매매가 없어요</div>
+            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 매매 내역을 입력해보세요.</div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- CALENDAR VIEW -->
+    <sc-if value="{{ isCal }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button onClick="{{ onPrevMonth }}" style="border:1px solid #E5E8EB;background:#fff;width:30px;height:30px;border-radius:9px;cursor:pointer;color:#4E5968;font-size:15px;">‹</button>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-0.02em;min-width:108px;text-align:center;">{{ cal.title }}</div>
+            <button onClick="{{ onNextMonth }}" style="border:1px solid #E5E8EB;background:#fff;width:30px;height:30px;border-radius:9px;cursor:pointer;color:#4E5968;font-size:15px;">›</button>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11.5px;color:#8B95A1;">이번 달 실현손익</div>
+            <div style="font-size:16px;font-weight:800;letter-spacing:-0.02em;color: {{ cal.sumColor }};margin-top:1px;">{{ cal.sumLabel }} <span style="font-size:12px;font-weight:600;color:#8B95A1;">{{ cal.countLabel }}</span></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;">
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#F04452;padding:4px 0;">일</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#8B95A1;padding:4px 0;">월</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#8B95A1;padding:4px 0;">화</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#8B95A1;padding:4px 0;">수</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#8B95A1;padding:4px 0;">목</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#8B95A1;padding:4px 0;">금</div>
+          <div style="text-align:center;font-size:12px;font-weight:600;color:#3182F6;padding:4px 0;">토</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+          <sc-for list="{{ cal.cells }}" as="cell" hint-placeholder-count="35">
+            <div style="min-height:62px;border-radius:11px;padding:7px 8px;display:flex;flex-direction:column;background: {{ cell.bg }};border:1px solid {{ cell.border }};">
+              <div style="font-size:12px;font-weight:600;color: {{ cell.dayColor }};">{{ cell.day }}</div>
+              <sc-if value="{{ cell.hasTrades }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:auto;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:-0.02em;color: {{ cell.pnlColor }};">{{ cell.pnlLabel }}</div>
+                  <div style="font-size:10px;color: {{ cell.subColor }};margin-top:1px;">{{ cell.countLabel }}</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:18px;margin-top:16px;font-size:12px;color:#8B95A1;">
+          <div style="display:flex;align-items:center;gap:6px;"><span style="width:11px;height:11px;border-radius:3px;background:#F04452;display:inline-block;"></span>수익</div>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="width:11px;height:11px;border-radius:3px;background:#3182F6;display:inline-block;"></span>손실</div>
+          <div style="margin-left:auto;">진하기 = 손익 크기</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ADD VIEW -->
+    <sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          <div style="font-size:15px;font-weight:800;margin-bottom:4px;">직접 입력</div>
+          <div style="font-size:12.5px;color:#8B95A1;margin-bottom:18px;">매매 한 건을 입력하면 차트가 자동 생성돼요.</div>
+          <div style="display:flex;flex-direction:column;gap:13px;">
+            <div>
+              <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">종목명</div>
+              <input value="{{ form.name }}" onChange="{{ set.name }}" placeholder="예: 삼성전자" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">수량 (주)</div>
+                <input value="{{ form.qty }}" onChange="{{ set.qty }}" type="number" placeholder="100" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">메모 / 사유</div>
+                <input value="{{ form.memo }}" onChange="{{ set.memo }}" placeholder="실적 기대" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매수일</div>
+                <input value="{{ form.buyDate }}" onChange="{{ set.buyDate }}" type="date" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:10px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매수가 (원)</div>
+                <input value="{{ form.buyPrice }}" onChange="{{ set.buyPrice }}" type="number" placeholder="71200" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매도일</div>
+                <input value="{{ form.sellDate }}" onChange="{{ set.sellDate }}" type="date" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:10px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+              <div>
+                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매도가 (원)</div>
+                <input value="{{ form.sellPrice }}" onChange="{{ set.sellPrice }}" type="number" placeholder="78500" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
+              </div>
+            </div>
+            <button onClick="{{ onAdd }}" style="margin-top:4px;border:none;background:#3182F6;color:#fff;font-size:14.5px;font-weight:700;padding:13px;border-radius:11px;cursor:pointer;">매매 건 추가</button>
+            <sc-if value="{{ formError }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12.5px;color:#F04452;text-align:center;">{{ formError }}</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="font-size:15px;font-weight:800;margin-bottom:4px;">거래내역 붙여넣기</div>
+            <div style="font-size:12.5px;color:#8B95A1;line-height:1.6;margin-bottom:14px;">엑셀/HTS에서 복사한 내역을 붙여넣으세요. 한 줄에 한 건씩, 아래 순서로 (탭 또는 쉼표 구분):</div>
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;margin-bottom:12px;line-height:1.7;">종목명 · 수량 · 매수가 · 매수일 · 매도가 · 매도일 · 메모</div>
+            <textarea value="{{ pasteText }}" onChange="{{ set.paste }}" placeholder="삼성전자	100	71200	2026-05-02	78500	2026-05-14	실적 기대" style="width:100%;height:120px;border:1px solid #E5E8EB;border-radius:11px;padding:12px 13px;font-size:13px;color:#191F28;resize:vertical;line-height:1.6;font-family:'SF Mono',ui-monospace,Menlo,monospace;"></textarea>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <button onClick="{{ onFillSample }}" style="flex:0 0 auto;border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:13.5px;font-weight:600;padding:11px 14px;border-radius:10px;cursor:pointer;">예시 채우기</button>
+              <button onClick="{{ onImport }}" style="flex:1;border:none;background:#191F28;color:#fff;font-size:13.5px;font-weight:700;padding:11px;border-radius:10px;cursor:pointer;">불러오기</button>
+            </div>
+            <sc-if value="{{ importMsg }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12.5px;color: {{ importMsgColor }};text-align:center;margin-top:10px;">{{ importMsg }}</div>
+            </sc-if>
+          </div>
+
+          <div style="background:#fff;border-radius:20px;padding:18px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-size:13.5px;font-weight:700;">데이터 관리</div>
+              <div style="font-size:12px;color:#8B95A1;margin-top:2px;">기록은 이 브라우저에 저장돼요.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button onClick="{{ onLoadSample }}" style="border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">예시 데이터</button>
+              <button onClick="{{ onClearAll }}" style="border:1px solid #FDE2E4;background:#fff;color:#F04452;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">전체 삭제</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const RED = '#F04452';
+const BLUE = '#3182F6';
+const KEY = 'suiknote_v1';
+
+function won(n) { return Math.round(n).toLocaleString('ko-KR'); }
+function parseD(s) { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function fmtDateShort(s) { const d = parseD(s); return (d.getMonth() + 1) + '.' + d.getDate(); }
+function daysBetween(a, b) { return Math.round((parseD(b) - parseD(a)) / 86400000); }
+function normDate(s) { return String(s).trim().replace(/[./]/g, '-').replace(/-(\d)(?=-|$)/g, '-0$1'); }
+function uid() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+const SAMPLE = [
+  { id: 's1', name: '삼성전자', qty: 100, buyDate: '2026-04-03', buyPrice: 71200, sellDate: '2026-04-21', sellPrice: 78500, memo: '1분기 실적 기대' },
+  { id: 's2', name: 'SK하이닉스', qty: 30, buyDate: '2026-04-07', buyPrice: 178000, sellDate: '2026-04-09', sellPrice: 169500, memo: '단타 손절' },
+  { id: 's3', name: 'NAVER', qty: 20, buyDate: '2026-03-25', buyPrice: 215000, sellDate: '2026-04-15', sellPrice: 238000, memo: 'AI 모멘텀' },
+  { id: 's4', name: '카카오', qty: 50, buyDate: '2026-04-10', buyPrice: 58400, sellDate: '2026-04-22', sellPrice: 54900, memo: '반등 실패' },
+  { id: 's5', name: '에코프로', qty: 5, buyDate: '2026-04-14', buyPrice: 92000, sellDate: '2026-04-28', sellPrice: 118000, memo: '2차전지 반등' },
+  { id: 's6', name: '현대차', qty: 15, buyDate: '2026-05-04', buyPrice: 248000, sellDate: '2026-05-13', sellPrice: 263500, memo: '배당 + 실적' },
+  { id: 's7', name: 'LG에너지솔루션', qty: 4, buyDate: '2026-05-06', buyPrice: 372000, sellDate: '2026-05-08', sellPrice: 358000, memo: '수급 악화' },
+  { id: 's8', name: '삼성전자', qty: 80, buyDate: '2026-05-15', buyPrice: 79800, sellDate: '2026-05-15', sellPrice: 79100, memo: '당일 스캘핑' },
+  { id: 's9', name: 'POSCO홀딩스', qty: 10, buyDate: '2026-05-20', buyPrice: 412000, sellDate: '2026-06-03', sellPrice: 445000, memo: '철강 반등' },
+  { id: 's10', name: '카카오', qty: 60, buyDate: '2026-06-05', buyPrice: 51200, sellDate: '2026-06-18', sellPrice: 56800, memo: '낙폭 과대' }
+];
+
+class Component extends DCLogic {
+  state = {
+    trades: SAMPLE.map(t => ({ ...t })),
+    tab: 'list',
+    expandedId: null,
+    filter: '__all',
+    calMonth: '2026-06',
+    form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' },
+    pasteText: '',
+    formError: '',
+    importMsg: '',
+    importOk: true
+  };
+
+  componentDidMount() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) this.setState({ trades: t }); }
+    } catch (e) {}
+    this._onResize = () => this.scheduleDraw();
+    window.addEventListener('resize', this._onResize);
+    this.scheduleDraw();
+  }
+
+  componentWillUnmount() { if (this._onResize) window.removeEventListener('resize', this._onResize); }
+
+  componentDidUpdate() { this.scheduleDraw(); }
+
+  scheduleDraw() {
+    clearTimeout(this._drawT);
+    this._drawT = setTimeout(() => this.drawAll(), 50);
+  }
+
+  getEnriched() { return this.state.trades.map(t => this.enrich(t)); }
+
+  drawAll() {
+    try {
+    const enriched = this.getEnriched();
+    document.querySelectorAll('canvas[data-eq]').forEach(c => this.drawEquity(c, enriched));
+    document.querySelectorAll('canvas[data-trade]').forEach(c => {
+      const t = enriched.find(x => x.id === c.getAttribute('data-trade'));
+      if (t) this.drawTradeChart(c, t);
+    });
+    } catch (err) {}
+  }
+
+  save(trades) {
+    try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {}
+  }
+
+  setTrades(trades, extra) {
+    this.setState({ trades, ...(extra || {}) }, () => this.save(trades));
+  }
+
+  enrich(t) {
+    const invested = t.buyPrice * t.qty;
+    const proceeds = t.sellPrice * t.qty;
+    const pnl = proceeds - invested;
+    const ret = invested ? pnl / invested : 0;
+    const hold = daysBetween(t.buyDate, t.sellDate);
+    const isWin = pnl >= 0;
+    const color = isWin ? RED : BLUE;
+    return {
+      ...t, invested, proceeds, pnl, ret, hold, isWin, color,
+      qtyLabel: t.qty + '주',
+      buyPriceLabel: won(t.buyPrice),
+      sellPriceLabel: won(t.sellPrice),
+      investedLabel: won(invested) + '원',
+      retLabel: (ret >= 0 ? '+' : '') + (ret * 100).toFixed(1) + '%',
+      pnlLabel: (pnl >= 0 ? '+' : '') + won(pnl) + '원',
+      holdLabel: hold === 0 ? '당일' : hold + '일',
+      sellDateLabel: fmtDateShort(t.sellDate),
+      memoLabel: t.memo || '',
+      expanded: this.state.expandedId === t.id,
+      onToggle: () => this.setState({ expandedId: this.state.expandedId === t.id ? null : t.id }),
+      onDelete: () => this.deleteTrade(t.id)
+    };
+  }
+
+  deleteTrade(id) {
+    this.setTrades(this.state.trades.filter(t => t.id !== id), { expandedId: null });
+  }
+
+  updateForm(field, val) {
+    this.setState({ form: { ...this.state.form, [field]: val }, formError: '' });
+  }
+
+  addTrade() {
+    const f = this.state.form;
+    if (!f.name || !f.qty || !f.buyPrice || !f.sellPrice || !f.buyDate || !f.sellDate) {
+      this.setState({ formError: '종목·수량·날짜·가격을 모두 입력해주세요.' });
+      return;
+    }
+    const t = {
+      id: uid(), name: f.name.trim(),
+      qty: parseFloat(String(f.qty).replace(/[^0-9.]/g, '')),
+      buyDate: f.buyDate, buyPrice: parseFloat(String(f.buyPrice).replace(/[^0-9.]/g, '')),
+      sellDate: f.sellDate, sellPrice: parseFloat(String(f.sellPrice).replace(/[^0-9.]/g, '')),
+      memo: f.memo.trim()
+    };
+    this.setTrades([...this.state.trades, t], {
+      form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' },
+      formError: '', tab: 'list', expandedId: t.id
+    });
+  }
+
+  importPaste() {
+    const text = (this.state.pasteText || '').trim();
+    if (!text) { this.setState({ importMsg: '붙여넣은 내용이 없어요.', importOk: false }); return; }
+    const out = [];
+    text.split(/\r?\n/).forEach(line => {
+      if (!line.trim()) return;
+      const c = line.split(/\t|,|\s{2,}/).map(s => s.trim()).filter(s => s !== '');
+      if (c.length < 6) return;
+      const name = c[0];
+      const qty = parseFloat(c[1].replace(/[^0-9.]/g, ''));
+      const bp = parseFloat(c[2].replace(/[^0-9.]/g, ''));
+      const bd = normDate(c[3]);
+      const sp = parseFloat(c[4].replace(/[^0-9.]/g, ''));
+      const sd = normDate(c[5]);
+      const memo = c.slice(6).join(' ');
+      if (!name || !qty || !bp || !sp || !/\d{4}-\d{2}-\d{2}/.test(bd) || !/\d{4}-\d{2}-\d{2}/.test(sd)) return;
+      out.push({ id: uid(), name, qty, buyDate: bd, buyPrice: bp, sellDate: sd, sellPrice: sp, memo });
+    });
+    if (!out.length) {
+      this.setState({ importMsg: '인식된 매매가 없어요. 형식을 확인해주세요.', importOk: false });
+      return;
+    }
+    this.setTrades([...this.state.trades, ...out], { pasteText: '', importMsg: out.length + '건을 불러왔어요.', importOk: true, tab: 'list' });
+  }
+
+  // ---- charts ----
+  priceSeries(t) {
+    const n = Math.max(7, Math.min(36, t.hold + 1));
+    let seed = 0; for (let i = 0; i < t.id.length; i++) seed = (seed * 31 + t.id.charCodeAt(i)) >>> 0;
+    const rand = mulberry32(seed || 1);
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const base = t.buyPrice + (t.sellPrice - t.buyPrice) * u;
+      const amp = t.buyPrice * 0.032;
+      arr.push(base + (rand() - 0.5) * 2 * amp * Math.sin(u * Math.PI));
+    }
+    arr[0] = t.buyPrice; arr[n - 1] = t.sellPrice;
+    return arr;
+  }
+
+  setupCanvas(el, cssW, cssH) {
+    const dpr = window.devicePixelRatio || 1;
+    el.width = Math.round(cssW * dpr);
+    el.height = Math.round(cssH * dpr);
+    const ctx = el.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+    return ctx;
+  }
+
+  rgba(hex, a) {
+    if (hex === RED) return 'rgba(240,68,82,' + a + ')';
+    if (hex === BLUE) return 'rgba(49,130,246,' + a + ')';
+    return 'rgba(140,149,161,' + a + ')';
+  }
+
+  drawTradeChart(el, t) {
+    const W = el.clientWidth || 648, H = 240, padL = 16, padR = 16, padT = 36, padB = 32;
+    const ctx = this.setupCanvas(el, W, H);
+    const s = this.priceSeries(t);
+    const min = Math.min(...s), max = Math.max(...s), range = (max - min) || 1, n = s.length;
+    const X = i => padL + (W - padL - padR) * (i / (n - 1));
+    const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
+    const pts = s.map((v, i) => [X(i), Y(v)]);
+    const color = t.color, buy = pts[0], sell = pts[n - 1];
+    // area
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.lineTo(X(n - 1), H - padB); ctx.lineTo(X(0), H - padB); ctx.closePath();
+    ctx.fillStyle = this.rgba(color, 0.12); ctx.fill();
+    // buy reference dashed
+    ctx.save(); ctx.setLineDash([4, 5]); ctx.strokeStyle = '#E5E8EB'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, buy[1]); ctx.lineTo(W - padR, buy[1]); ctx.stroke(); ctx.restore();
+    // line
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.stroke();
+    // markers
+    [[buy, '#8B95A1'], [sell, color]].forEach(([p, st]) => {
+      ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 6.2832);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = st; ctx.stroke();
+    });
+    // labels
+    ctx.font = '700 12.5px Pretendard, sans-serif'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#6B7684'; ctx.textAlign = 'left'; ctx.fillText('매수 ' + won(t.buyPrice), buy[0], buy[1] - 13);
+    ctx.fillStyle = color; ctx.textAlign = 'right'; ctx.fillText('매도 ' + won(t.sellPrice), sell[0], sell[1] - 13);
+    ctx.font = '11px Pretendard, sans-serif'; ctx.fillStyle = '#B0B8C1';
+    ctx.textAlign = 'left'; ctx.fillText(t.buyDate, padL, H - 10);
+    ctx.textAlign = 'right'; ctx.fillText(t.sellDate, W - padR, H - 10);
+  }
+
+  drawEquity(el, enriched) {
+    const W = el.clientWidth || 400, H = 90, padT = 10, padB = 10;
+    const ctx = this.setupCanvas(el, W, H);
+    if (!enriched.length) {
+      ctx.font = '13px Pretendard, sans-serif'; ctx.fillStyle = '#C4C9CF';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('데이터 없음', W / 2, H / 2);
+      return;
+    }
+    const sorted = [...enriched].sort((a, b) => parseD(a.sellDate) - parseD(b.sellDate));
+    let cum = 0; const vals = [0]; sorted.forEach(t => { cum += t.pnl; vals.push(cum); });
+    const min = Math.min(...vals, 0), max = Math.max(...vals, 0), range = (max - min) || 1, n = vals.length;
+    const X = i => (W) * (i / (n - 1));
+    const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
+    const color = cum >= 0 ? RED : BLUE, zeroY = Y(0);
+    // zero line
+    ctx.strokeStyle = '#EDF0F3'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(W, zeroY); ctx.stroke();
+    // area
+    ctx.beginPath();
+    vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
+    ctx.lineTo(X(n - 1), H - padB); ctx.lineTo(X(0), H - padB); ctx.closePath();
+    ctx.fillStyle = this.rgba(color, 0.14); ctx.fill();
+    // line
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
+    ctx.stroke();
+  }
+
+  buildCalendar(enriched) {
+    const [y, m] = this.state.calMonth.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const startDow = first.getDay();
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const byDay = {};
+    enriched.forEach(t => {
+      const d = parseD(t.sellDate);
+      if (d.getFullYear() === y && d.getMonth() === m - 1) {
+        const k = d.getDate();
+        if (!byDay[k]) byDay[k] = { pnl: 0, count: 0 };
+        byDay[k].pnl += t.pnl; byDay[k].count += 1;
+      }
+    });
+    let maxAbs = 1;
+    Object.values(byDay).forEach(v => { maxAbs = Math.max(maxAbs, Math.abs(v.pnl)); });
+    const cells = [];
+    for (let i = 0; i < startDow; i++) cells.push({ day: '', bg: 'transparent', border: 'transparent', dayColor: 'transparent', hasTrades: false });
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dow = (startDow + day - 1) % 7;
+      const dayColor = dow === 0 ? '#F04452' : (dow === 6 ? '#3182F6' : '#6B7684');
+      const info = byDay[day];
+      if (info) {
+        const isWin = info.pnl >= 0;
+        const baseC = isWin ? RED : BLUE;
+        const alpha = 0.1 + 0.62 * Math.min(1, Math.abs(info.pnl) / maxAbs);
+        const strong = alpha > 0.42;
+        cells.push({
+          day: String(day),
+          bg: (isWin ? 'rgba(240,68,82,' : 'rgba(49,130,246,') + alpha.toFixed(2) + ')',
+          border: 'transparent',
+          dayColor: strong ? '#fff' : dayColor,
+          hasTrades: true,
+          pnlLabel: (info.pnl >= 0 ? '+' : '') + won(info.pnl),
+          pnlColor: strong ? '#fff' : baseC,
+          subColor: strong ? 'rgba(255,255,255,0.85)' : '#8B95A1',
+          countLabel: info.count + '건'
+        });
+      } else {
+        cells.push({ day: String(day), bg: '#FAFBFC', border: '#F2F4F6', dayColor, hasTrades: false });
+      }
+    }
+    while (cells.length % 7) cells.push({ day: '', bg: 'transparent', border: 'transparent', dayColor: 'transparent', hasTrades: false });
+    let monthPnl = 0, monthCount = 0;
+    Object.values(byDay).forEach(v => { monthPnl += v.pnl; monthCount += v.count; });
+    return {
+      cells,
+      title: y + '년 ' + m + '월',
+      sumLabel: (monthPnl >= 0 ? '+' : '') + won(monthPnl) + '원',
+      sumColor: monthPnl >= 0 ? RED : BLUE,
+      countLabel: monthCount ? '· ' + monthCount + '건' : '· 0건'
+    };
+  }
+
+  shiftMonth(delta) {
+    let [y, m] = this.state.calMonth.split('-').map(Number);
+    m += delta;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    this.setState({ calMonth: y + '-' + String(m).padStart(2, '0') });
+  }
+
+  renderVals() {
+    this.scheduleDraw();
+    const st = this.state;
+    const enriched = this.getEnriched();
+
+    // stats
+    const count = enriched.length;
+    const totalInvested = enriched.reduce((a, t) => a + t.invested, 0);
+    const totalPnl = enriched.reduce((a, t) => a + t.pnl, 0);
+    const cumRet = totalInvested ? totalPnl / totalInvested : 0;
+    const wins = enriched.filter(t => t.isWin).length;
+    const losses = count - wins;
+    const winRate = count ? Math.round((wins / count) * 100) : 0;
+    const avgRet = count ? enriched.reduce((a, t) => a + t.ret, 0) / count : 0;
+    const avgHold = count ? Math.round(enriched.reduce((a, t) => a + t.hold, 0) / count) : 0;
+    const stats = {
+      countLabel: '총 ' + count + '건',
+      totalPnlLabel: (totalPnl >= 0 ? '+' : '') + won(totalPnl) + '원',
+      pnlColor: totalPnl >= 0 ? RED : BLUE,
+      cumRetLabel: '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
+      winRateLabel: winRate + '%',
+      winLossLabel: wins + '승 ' + losses + '패',
+      avgRetLabel: (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%',
+      avgRetColor: avgRet >= 0 ? RED : BLUE,
+      investedLabel: won(totalInvested) + '원',
+      avgHoldLabel: avgHold === 0 ? '당일' : avgHold + '일'
+    };
+
+    // filter chips
+    const names = [];
+    enriched.forEach(t => { if (names.indexOf(t.name) < 0) names.push(t.name); });
+    const chipDef = [{ key: '__all', label: '전체' }].concat(names.map(n => ({ key: n, label: n })));
+    const chips = chipDef.map(c => {
+      const active = st.filter === c.key;
+      return {
+        label: c.label,
+        bg: active ? '#191F28' : '#fff',
+        color: active ? '#fff' : '#4E5968',
+        border: active ? '#191F28' : '#E5E8EB',
+        onClick: () => this.setState({ filter: c.key })
+      };
+    });
+
+    const sorted = [...enriched].sort((a, b) => parseD(b.sellDate) - parseD(a.sellDate));
+    const visibleTrades = st.filter === '__all' ? sorted : sorted.filter(t => t.name === st.filter);
+
+    // tabs
+    const tabDef = [{ key: 'list', label: '매매 내역' }, { key: 'cal', label: '손익 캘린더' }, { key: 'add', label: '거래 추가' }];
+    const tabList = tabDef.map(tb => {
+      const active = st.tab === tb.key;
+      return {
+        label: tb.label,
+        bg: active ? '#fff' : 'transparent',
+        color: active ? '#191F28' : '#8B95A1',
+        shadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+        onClick: () => this.setState({ tab: tb.key })
+      };
+    });
+
+    const cal = this.buildCalendar(enriched);
+
+    const set = {
+      name: e => this.updateForm('name', e.target.value),
+      qty: e => this.updateForm('qty', e.target.value),
+      buyDate: e => this.updateForm('buyDate', e.target.value),
+      buyPrice: e => this.updateForm('buyPrice', e.target.value),
+      sellDate: e => this.updateForm('sellDate', e.target.value),
+      sellPrice: e => this.updateForm('sellPrice', e.target.value),
+      memo: e => this.updateForm('memo', e.target.value),
+      paste: e => this.setState({ pasteText: e.target.value, importMsg: '' })
+    };
+
+    return {
+      stats,
+      hasData: enriched.length > 0,
+      tabList,
+      isList: st.tab === 'list', isCal: st.tab === 'cal', isAdd: st.tab === 'add',
+      chips, visibleTrades,
+      hasTrades: count > 0 && visibleTrades.length > 0,
+      noTrades: visibleTrades.length === 0,
+      cal,
+      onPrevMonth: () => this.shiftMonth(-1),
+      onNextMonth: () => this.shiftMonth(1),
+      form: st.form, set,
+      formError: st.formError,
+      onAdd: () => this.addTrade(),
+      pasteText: st.pasteText,
+      onImport: () => this.importPaste(),
+      onFillSample: () => this.setState({ pasteText: '삼성전자\t100\t71200\t2026-05-02\t78500\t2026-05-14\t실적 기대\nSK하이닉스\t20\t172000\t2026-06-01\t185000\t2026-06-12\tHBM 수요\n카카오\t40\t52000\t2026-06-09\t49800\t2026-06-09\t당일 손절', importMsg: '' }),
+      importMsg: st.importMsg,
+      importMsgColor: st.importOk ? '#3182F6' : '#F04452',
+      onLoadSample: () => this.setTrades(SAMPLE.map(t => ({ ...t })), { tab: 'list' }),
+      onClearAll: () => this.setTrades([], { expandedId: null })
+    };
+  }
+}
+</script>
+</body>
+</html>
