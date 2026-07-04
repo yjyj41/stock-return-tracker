@@ -294,8 +294,8 @@ const KEY = 'suiknote_v1';
 
 // 실제 시세: 네이버 금융 (CORS 우회용 공개 프록시)
 const PROXIES = [
-  u => 'https://api.allorigins.win/get?url=' + encodeURIComponent(u),
   u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/get?url=' + encodeURIComponent(u),
   u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
   u => 'https://thingproxy.freeboard.io/fetch/' + u
 ];
@@ -527,12 +527,16 @@ class Component extends DCLogic {
     const order = this.goodProxy >= 0 ? [this.goodProxy, ...PROXIES.keys()].filter((v, i, a) => a.indexOf(v) === i) : [...PROXIES.keys()];
     let lastErr;
     for (const i of order) {
+      const ctrl = new AbortController();
+      const tm = setTimeout(() => ctrl.abort(), 8000); // 응답 없이 매달리는 프록시 방지
       try {
-        const r = await fetch(PROXIES[i](url)); if (!r.ok) throw new Error('http');
+        const r = await fetch(PROXIES[i](url), { signal: ctrl.signal }); if (!r.ok) throw new Error('http ' + r.status);
         let txt = await r.text();
         try { const o = JSON.parse(txt); if (o && typeof o.contents === 'string') txt = o.contents; } catch (e) {}
-        this.goodProxy = i; return txt;
+        if (!txt || txt.length < 5) throw new Error('empty');
+        clearTimeout(tm); this.goodProxy = i; return txt;
       } catch (e) { lastErr = e; }
+      finally { clearTimeout(tm); }
     }
     throw lastErr || new Error('proxy fail');
   }
