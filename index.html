@@ -410,6 +410,7 @@ class Component extends DCLogic {
   componentDidMount() {
     this.priceCache = {};
     this.goodProxy = -1;
+    try { const today = todayYmd(); Object.keys(localStorage).forEach(k => { if (k.indexOf('pc_') === 0 && !k.endsWith(today)) localStorage.removeItem(k); }); } catch (e) {}
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) this.setState({ trades: t }); }
@@ -542,7 +543,7 @@ class Component extends DCLogic {
     let lastErr;
     for (const i of order) {
       const ctrl = new AbortController();
-      const tm = setTimeout(() => ctrl.abort(), 8000); // 응답 없이 매달리는 프록시 방지
+      const tm = setTimeout(() => ctrl.abort(), 6000); // 응답 없이 매달리는 프록시 방지
       try {
         const r = await fetch(PROXIES[i](url), { signal: ctrl.signal }); if (!r.ok) throw new Error('http ' + r.status);
         let txt = await r.text();
@@ -595,17 +596,26 @@ class Component extends DCLogic {
       if (!t._resolving) { this.patchTrade(t.id, { _resolving: true }); this.resolveCode(t.name).then(c => this.patchTrade(t.id, { code: c || '', _noCode: !c, _resolving: false })); }
       this.drawMsg(el, '종목코드 찾는 중…'); return;
     }
-    const fromY = ymdOf(t.buyDate, -14), toY = todayYmd();
+    // 같은 종목의 모든 매매가 한 번의 요청을 공유하도록, 그 종목 '최초 매수일' 기준으로 받는다
+    let earliest = t.buyDate;
+    this.state.trades.forEach(x => { const xc = x.code || CODE_MAP[String(x.name).replace(/\s/g, '')]; if (xc === code && x.buyDate < earliest) earliest = x.buyDate; });
+    const fromY = ymdOf(earliest, -14), toY = todayYmd();
     const ck = code + '|' + fromY + '|' + toY;
-    const s = this.priceCache[ck];
+    let s = this.priceCache[ck];
+    if (!s) { // 메모리에 없으면 브라우저 저장 캐시 확인 → 재접속/새로고침해도 즉시
+      try { const raw = localStorage.getItem('pc_' + ck); if (raw) { const ser = JSON.parse(raw); if (Array.isArray(ser) && ser.length) s = this.priceCache[ck] = ser; } } catch (e) {}
+    }
     if (s === 'loading') { this.drawMsg(el, '실제 가격 불러오는 중…'); return; }
     if (s === 'error') { this.drawMsg(el, '가격을 불러오지 못했어요 (다시 펼쳐보세요)'); return; }
     if (!s) {
       this.priceCache[ck] = 'loading';
-      this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
+      this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; if (ser.length) { try { localStorage.setItem('pc_' + ck, JSON.stringify(ser)); } catch (e) {} } this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
       this.drawMsg(el, '실제 가격 불러오는 중…'); return;
     }
-    this.drawRealChart(el, t, s);
+    // 이 매매 건 창(매수 14일 전 ~ 오늘)으로 잘라서 표시
+    const fromMs = parseD(t.buyDate).getTime() - 14 * 86400000;
+    const disp = s.filter(p => p.t >= fromMs);
+    this.drawRealChart(el, t, disp.length > 1 ? disp : s);
   }
 
   drawRealChart(el, t, series) {
@@ -618,6 +628,10 @@ class Component extends DCLogic {
     const range = (max - min) || 1, n = series.length;
     const X = i => padL + (W - padL - padR) * (n <= 1 ? 0.5 : i / (n - 1));
     const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
+    // 세로 날짜 격자 (뒤에 깔기)
+    const ticks = Math.min(6, Math.max(3, n - 1));
+    ctx.strokeStyle = '#F1F3F5'; ctx.lineWidth = 1;
+    for (let k = 0; k <= ticks; k++) { const gx = X(Math.round((n - 1) * k / ticks)); ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, H - padB); ctx.stroke(); }
     // 매도 이후 영역 음영
     if (si < n - 1) { ctx.fillStyle = '#F7F8FA'; ctx.fillRect(X(si), padT, (W - padR) - X(si), H - padT - padB); }
     // 종가 라인
@@ -641,10 +655,13 @@ class Component extends DCLogic {
     ctx.fillStyle = t.color; ctx.textAlign = sx > W - 90 ? 'right' : 'left'; ctx.fillText('매도 ' + won(t.sellPrice), sx > W - 90 ? sx : sx + 2, sy - 12);
     // 고점 라벨
     ctx.font = '11px Pretendard, sans-serif'; ctx.fillStyle = '#8B95A1'; ctx.textAlign = 'right'; ctx.fillText('보유중 고점 ' + won(peak.c), W - padR, Y(peak.c) - 5);
-    // 날짜축
-    ctx.fillStyle = '#B0B8C1'; ctx.font = '11px Pretendard, sans-serif';
-    ctx.textAlign = 'left'; ctx.fillText(t.buyDate.slice(5), padL, H - 10);
-    ctx.textAlign = 'right'; ctx.fillText('오늘', W - padR, H - 10);
+    // 날짜축 (촘촘하게 5~6개)
+    ctx.fillStyle = '#8B95A1'; ctx.font = '10.5px Pretendard, sans-serif';
+    for (let k = 0; k <= ticks; k++) {
+      const idx = Math.round((n - 1) * k / ticks); const d = new Date(series[idx].t);
+      ctx.textAlign = k === 0 ? 'left' : (k === ticks ? 'right' : 'center');
+      ctx.fillText((d.getMonth() + 1) + '.' + d.getDate(), X(idx), H - 9);
+    }
     // 매도 이후 요약 저장
     const last = series[n - 1].c;
     let afterMax = t.sellPrice; for (let i = si; i < n; i++) if (series[i].c > afterMax) afterMax = series[i].c;
