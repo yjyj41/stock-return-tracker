@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <x-dc>
@@ -115,7 +116,7 @@
                 </div>
                 <sc-if value="{{ t.expanded }}" hint-placeholder-val="{{ false }}">
                   <div style="padding:6px 18px 20px;border-top:1px solid #F2F4F6;">
-                    <canvas data-trade="{{ t.id }}" style="width:100%;height:240px;display:block;"></canvas>
+                    <canvas data-trade="{{ t.id }}" style="width:100%;height:250px;display:block;"></canvas>
                     <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap;">
                       <div><div style="font-size:11px;color:#8B95A1;">매수</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.buyDate }} · {{ t.buyPriceLabel }}원</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">매도</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.sellDate }} · {{ t.sellPriceLabel }}원</div></div>
@@ -123,6 +124,9 @@
                       <div><div style="font-size:11px;color:#8B95A1;">실현손익</div><div style="font-size:13px;font-weight:700;margin-top:3px;color: {{ t.color }};">{{ t.pnlLabel }}</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">보유기간</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.holdLabel }}</div></div>
                     </div>
+                    <sc-if value="{{ t.afterInfo }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:12px;font-size:12.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;line-height:1.6;">{{ t.afterInfo }}</div>
+                    </sc-if>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:16px;">
                       <sc-if value="{{ t.memo }}" hint-placeholder-val="메모">
                         <span style="font-size:13px;color:#4E5968;background:#F2F4F6;padding:8px 12px;border-radius:9px;">{{ t.memoLabel }}</span>
@@ -138,7 +142,7 @@
         <sc-if value="{{ noTrades }}" hint-placeholder-val="{{ false }}">
           <div style="background:#fff;border-radius:16px;padding:54px 20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-size:15px;font-weight:700;color:#4E5968;">아직 기록된 매매가 없어요</div>
-            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 매매 내역을 입력해보세요.</div>
+            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 삼성증권 CSV/XLSX를 올려보세요.</div>
           </div>
         </sc-if>
       </div>
@@ -193,7 +197,7 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
           <div style="font-size:15px;font-weight:800;margin-bottom:4px;">직접 입력</div>
-          <div style="font-size:12.5px;color:#8B95A1;margin-bottom:18px;">매매 한 건을 입력하면 차트가 자동 생성돼요.</div>
+          <div style="font-size:12.5px;color:#8B95A1;margin-bottom:18px;">매매 한 건을 입력하면 실제 차트가 자동 생성돼요.</div>
           <div style="display:flex;flex-direction:column;gap:13px;">
             <div>
               <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">종목명</div>
@@ -238,10 +242,24 @@
 
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="font-size:15px;font-weight:800;margin-bottom:4px;">삼성증권 파일 불러오기</div>
+            <div style="font-size:12.5px;color:#8B95A1;line-height:1.6;margin-bottom:14px;">삼성증권 <b>거래내역(체결)</b> CSV·XLSX를 올리면 종목별로 매수→매도를 자동으로 묶어 손익을 계산해요. (USD·입출금은 제외)</div>
+            <label data-csvdrop style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px dashed #C4C9CF;border-radius:14px;padding:26px 16px;cursor:pointer;text-align:center;background:#fff;">
+              <div style="font-size:26px;">📄</div>
+              <div style="font-size:13.5px;font-weight:700;color:#4E5968;">여기에 파일을 드롭</div>
+              <div style="font-size:12px;color:#8B95A1;">또는 클릭해서 선택 · CSV / XLSX · CP949 자동인식</div>
+              <input type="file" accept=".csv,.xlsx,.xls" onChange="{{ set.csv }}" style="display:none;" />
+            </label>
+            <sc-if value="{{ csvMsg }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12.5px;color: {{ csvMsgColor }};text-align:center;margin-top:12px;line-height:1.5;">{{ csvMsg }}</div>
+            </sc-if>
+          </div>
+
+          <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-size:15px;font-weight:800;margin-bottom:4px;">거래내역 붙여넣기</div>
             <div style="font-size:12.5px;color:#8B95A1;line-height:1.6;margin-bottom:14px;">엑셀/HTS에서 복사한 내역을 붙여넣으세요. 한 줄에 한 건씩, 아래 순서로 (탭 또는 쉼표 구분):</div>
             <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;margin-bottom:12px;line-height:1.7;">종목명 · 수량 · 매수가 · 매수일 · 매도가 · 매도일 · 메모</div>
-            <textarea value="{{ pasteText }}" onChange="{{ set.paste }}" placeholder="삼성전자	100	71200	2026-05-02	78500	2026-05-14	실적 기대" style="width:100%;height:120px;border:1px solid #E5E8EB;border-radius:11px;padding:12px 13px;font-size:13px;color:#191F28;resize:vertical;line-height:1.6;font-family:'SF Mono',ui-monospace,Menlo,monospace;"></textarea>
+            <textarea value="{{ pasteText }}" onChange="{{ set.paste }}" placeholder="삼성전자	100	71200	2026-05-02	78500	2026-05-14	실적 기대" style="width:100%;height:100px;border:1px solid #E5E8EB;border-radius:11px;padding:12px 13px;font-size:13px;color:#191F28;resize:vertical;line-height:1.6;font-family:'SF Mono',ui-monospace,Menlo,monospace;"></textarea>
             <div style="display:flex;gap:8px;margin-top:12px;">
               <button onClick="{{ onFillSample }}" style="flex:0 0 auto;border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:13.5px;font-weight:600;padding:11px 14px;border-radius:10px;cursor:pointer;">예시 채우기</button>
               <button onClick="{{ onImport }}" style="flex:1;border:none;background:#191F28;color:#fff;font-size:13.5px;font-weight:700;padding:11px;border-radius:10px;cursor:pointer;">불러오기</button>
@@ -271,7 +289,24 @@
 <script type="text/x-dc" data-dc-script>
 const RED = '#F04452';
 const BLUE = '#3182F6';
+const GRAY = '#8B95A1';
 const KEY = 'suiknote_v1';
+
+// 실제 시세: 네이버 금융 (CORS 우회용 공개 프록시)
+const PROXIES = [
+  u => 'https://api.allorigins.win/get?url=' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+  u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+  u => 'https://thingproxy.freeboard.io/fetch/' + u
+];
+// 확실한 대형주만 하드코딩. 나머지는 네이버 종목검색으로 자동 조회.
+const CODE_MAP = {
+  '삼성전자':'005930','SK하이닉스':'000660','NAVER':'035420','카카오':'035720','현대차':'005380',
+  '기아':'000270','현대모비스':'012330','펄어비스':'263750','두산에너빌리티':'034020','리노공업':'058470',
+  '삼성전기':'009150','풍산':'103140','한미반도체':'042700','카카오페이':'377300','미래에셋증권':'006800',
+  '삼양식품':'003230','원익IPS':'240810','한전기술':'052690','엔켐':'348370','알테오젠':'196170',
+  '한솔케미칼':'014680','한화솔루션':'009830','한화시스템':'272210','LS ELECTRIC':'010120','삼천당제약':'000250'
+};
 
 function won(n) { return Math.round(n).toLocaleString('ko-KR'); }
 function parseD(s) { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
@@ -281,17 +316,72 @@ function normDate(s) { return String(s).trim().replace(/[./]/g, '-').replace(/-(
 function uid() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
+// 날짜 → 네이버 YYYYMMDD
+function ymdOf(dstr, addDays) { const d = parseD(dstr); if (addDays) d.setDate(d.getDate() + addDays); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
+function todayYmd() { const d = new Date(); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
+function nearestIdx(series, ms) { let bi = 0, bd = Infinity; for (let i = 0; i < series.length; i++) { const dd = Math.abs(series[i].t - ms); if (dd < bd) { bd = dd; bi = i; } } return bi; }
+
+// ---- CSV/XLSX 파싱 ----
+function num(x) { if (x === null || x === undefined || x === '') return null; if (typeof x === 'number') return x; const v = parseFloat(String(x).replace(/,/g, '').trim()); return isNaN(v) ? null : v; }
+function decodeBuf(buf) {
+  const bytes = new Uint8Array(buf);
+  try { const u = new TextDecoder('utf-8', { fatal: false }).decode(bytes); if (!/�/.test(u)) return u; try { return new TextDecoder('euc-kr').decode(bytes); } catch (e) { return u; } } catch (e) { return new TextDecoder().decode(bytes); }
+}
+function parseCsvRows(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) { const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else { if (ch === '"') q = true; else if (ch === ',') { row.push(cur); cur = ''; } else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else if (ch === '\r') {} else cur += ch; }
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+function buildRounds(execs) {
+  const rounds = []; let pos = 0, bq = 0, bc = 0, sq = 0, sc = 0, bd = null, sd = null;
+  for (const e of execs) {
+    if (e.side === 'B') { if (pos === 0) { bq = bc = sq = sc = 0; bd = e.date; sd = null; } bq += e.qty; bc += e.qty * e.price; pos += e.qty; if (!bd) bd = e.date; }
+    else { sq += e.qty; sc += e.qty * e.price; sd = e.date; pos -= e.qty; }
+    if (pos === 0 && (sq > 0 || bq > 0)) {
+      if (bq > 0 && sq > 0) rounds.push({ buyDate: bd, sellDate: sd, qty: Math.round(Math.min(bq, sq)), buyPrice: bc / bq, sellPrice: sc / sq, pnl: sc - bc * (sq / bq) });
+      bq = bc = sq = sc = 0; bd = sd = null;
+    }
+  }
+  return rounds;
+}
+function parseLedger(rows) {
+  let h = -1;
+  for (let i = 0; i < Math.min(rows.length, 8); i++) { if (rows[i] && rows[i].some(c => String(c).includes('거래일자'))) { h = i; break; } }
+  const hdr = h >= 0 ? rows[h] : ['거래일자','거래명','거래내용','통화코드','금액(수량)','','현금잔액','잔고수량','평가금액','거래단가','처리점'];
+  const find = (...keys) => { for (let i = 0; i < hdr.length; i++) { const s = String(hdr[i] || ''); if (keys.some(k => s.includes(k))) return i; } return -1; };
+  const cDate = find('거래일자','일자'), cType = find('거래명','구분','적요'), cName = find('거래내용','종목'), cCur = find('통화'), cAmt = find('금액'), cPrice = find('거래단가','단가');
+  const amt = cAmt >= 0 ? cAmt : 4, dec = amt + 1, price = cPrice >= 0 ? cPrice : 9;
+  const start = h >= 0 ? h + 1 : 0;
+  const byName = new Map();
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const type = String(r[cType >= 0 ? cType : 1] || ''); const name = r[cName >= 0 ? cName : 2]; const cur = r[cCur >= 0 ? cCur : 3];
+    if (!name) continue;
+    if (cur === 'USD' || type.includes('외화') || type.includes('미국')) continue;
+    const isbuy = type.includes('매수'), issell = type.includes('매도');
+    if (!isbuy && !issell) continue;
+    const p = num(r[price]); if (!p) continue;
+    const q = Math.abs(num(isbuy ? r[amt] : r[dec]) || 0); if (!q) continue;
+    let d = r[cDate >= 0 ? cDate : 0];
+    if (d instanceof Date) d = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    else d = normDate(String(d).slice(0, 10));
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push({ date: d, side: isbuy ? 'B' : 'S', qty: q, price: p });
+  }
+  const trades = [];
+  for (const [name, ex] of byName) { for (const r of buildRounds(ex)) { if (r.qty > 0) trades.push({ name, ...r }); } }
+  return trades;
+}
+
 const SAMPLE = [
   { id: 's1', name: '삼성전자', qty: 100, buyDate: '2026-04-03', buyPrice: 71200, sellDate: '2026-04-21', sellPrice: 78500, memo: '1분기 실적 기대' },
-  { id: 's2', name: 'SK하이닉스', qty: 30, buyDate: '2026-04-07', buyPrice: 178000, sellDate: '2026-04-09', sellPrice: 169500, memo: '단타 손절' },
   { id: 's3', name: 'NAVER', qty: 20, buyDate: '2026-03-25', buyPrice: 215000, sellDate: '2026-04-15', sellPrice: 238000, memo: 'AI 모멘텀' },
-  { id: 's4', name: '카카오', qty: 50, buyDate: '2026-04-10', buyPrice: 58400, sellDate: '2026-04-22', sellPrice: 54900, memo: '반등 실패' },
-  { id: 's5', name: '에코프로', qty: 5, buyDate: '2026-04-14', buyPrice: 92000, sellDate: '2026-04-28', sellPrice: 118000, memo: '2차전지 반등' },
-  { id: 's6', name: '현대차', qty: 15, buyDate: '2026-05-04', buyPrice: 248000, sellDate: '2026-05-13', sellPrice: 263500, memo: '배당 + 실적' },
-  { id: 's7', name: 'LG에너지솔루션', qty: 4, buyDate: '2026-05-06', buyPrice: 372000, sellDate: '2026-05-08', sellPrice: 358000, memo: '수급 악화' },
-  { id: 's8', name: '삼성전자', qty: 80, buyDate: '2026-05-15', buyPrice: 79800, sellDate: '2026-05-15', sellPrice: 79100, memo: '당일 스캘핑' },
-  { id: 's9', name: 'POSCO홀딩스', qty: 10, buyDate: '2026-05-20', buyPrice: 412000, sellDate: '2026-06-03', sellPrice: 445000, memo: '철강 반등' },
-  { id: 's10', name: '카카오', qty: 60, buyDate: '2026-06-05', buyPrice: 51200, sellDate: '2026-06-18', sellPrice: 56800, memo: '낙폭 과대' }
+  { id: 's5', name: '두산에너빌리티', qty: 5, buyDate: '2026-04-14', buyPrice: 92000, sellDate: '2026-04-28', sellPrice: 118000, memo: '원전 반등' },
+  { id: 's9', name: '펄어비스', qty: 10, buyDate: '2026-05-20', buyPrice: 41200, sellDate: '2026-06-03', sellPrice: 44500, memo: '신작 기대' }
 ];
 
 class Component extends DCLogic {
@@ -305,10 +395,14 @@ class Component extends DCLogic {
     pasteText: '',
     formError: '',
     importMsg: '',
-    importOk: true
+    importOk: true,
+    csvMsg: '',
+    csvOk: true
   };
 
   componentDidMount() {
+    this.priceCache = {};
+    this.goodProxy = -1;
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) this.setState({ trades: t }); }
@@ -316,48 +410,52 @@ class Component extends DCLogic {
     this._onResize = () => this.scheduleDraw();
     window.addEventListener('resize', this._onResize);
     this.scheduleDraw();
+    this.bindDrop();
   }
 
   componentWillUnmount() { if (this._onResize) window.removeEventListener('resize', this._onResize); }
 
-  componentDidUpdate() { this.scheduleDraw(); }
+  componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); }
 
-  scheduleDraw() {
-    clearTimeout(this._drawT);
-    this._drawT = setTimeout(() => this.drawAll(), 50);
+  scheduleDraw() { clearTimeout(this._drawT); this._drawT = setTimeout(() => this.drawAll(), 50); }
+
+  bindDrop() {
+    document.querySelectorAll('[data-csvdrop]').forEach(el => {
+      if (el._bound) return; el._bound = true;
+      el.addEventListener('dragover', e => { e.preventDefault(); el.style.borderColor = '#3182F6'; el.style.background = '#F0F6FF'; });
+      el.addEventListener('dragleave', e => { el.style.borderColor = '#C4C9CF'; el.style.background = '#fff'; });
+      el.addEventListener('drop', e => { e.preventDefault(); el.style.borderColor = '#C4C9CF'; el.style.background = '#fff'; const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) this.handleFile(f); });
+    });
   }
 
   getEnriched() { return this.state.trades.map(t => this.enrich(t)); }
 
   drawAll() {
     try {
-    const enriched = this.getEnriched();
-    document.querySelectorAll('canvas[data-eq]').forEach(c => this.drawEquity(c, enriched));
-    document.querySelectorAll('canvas[data-trade]').forEach(c => {
-      const t = enriched.find(x => x.id === c.getAttribute('data-trade'));
-      if (t) this.drawTradeChart(c, t);
-    });
+      const enriched = this.getEnriched();
+      document.querySelectorAll('canvas[data-eq]').forEach(c => this.drawEquity(c, enriched));
+      document.querySelectorAll('canvas[data-trade]').forEach(c => {
+        const t = enriched.find(x => x.id === c.getAttribute('data-trade'));
+        if (t) this.drawTradeChart(c, t);
+      });
     } catch (err) {}
   }
 
-  save(trades) {
-    try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {}
-  }
-
-  setTrades(trades, extra) {
-    this.setState({ trades, ...(extra || {}) }, () => this.save(trades));
-  }
+  save(trades) { try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {} }
+  setTrades(trades, extra) { this.setState({ trades, ...(extra || {}) }, () => this.save(trades)); }
+  patchTrade(id, patch) { const trades = this.state.trades.map(t => t.id === id ? { ...t, ...patch } : t); this.setTrades(trades); }
 
   enrich(t) {
     const invested = t.buyPrice * t.qty;
-    const proceeds = t.sellPrice * t.qty;
-    const pnl = proceeds - invested;
+    const pnl = (t.sellPrice - t.buyPrice) * t.qty;
     const ret = invested ? pnl / invested : 0;
     const hold = daysBetween(t.buyDate, t.sellDate);
     const isWin = pnl >= 0;
     const color = isWin ? RED : BLUE;
+    const nk = String(t.name).replace(/\s/g, '');
     return {
-      ...t, invested, proceeds, pnl, ret, hold, isWin, color,
+      ...t, invested, pnl, ret, hold, isWin, color,
+      code: t.code || CODE_MAP[nk] || '',
       qtyLabel: t.qty + '주',
       buyPriceLabel: won(t.buyPrice),
       sellPriceLabel: won(t.sellPrice),
@@ -367,37 +465,21 @@ class Component extends DCLogic {
       holdLabel: hold === 0 ? '당일' : hold + '일',
       sellDateLabel: fmtDateShort(t.sellDate),
       memoLabel: t.memo || '',
+      afterInfo: (this.priceCache && this.priceCache['after_' + t.id]) || '',
       expanded: this.state.expandedId === t.id,
       onToggle: () => this.setState({ expandedId: this.state.expandedId === t.id ? null : t.id }),
       onDelete: () => this.deleteTrade(t.id)
     };
   }
 
-  deleteTrade(id) {
-    this.setTrades(this.state.trades.filter(t => t.id !== id), { expandedId: null });
-  }
-
-  updateForm(field, val) {
-    this.setState({ form: { ...this.state.form, [field]: val }, formError: '' });
-  }
+  deleteTrade(id) { this.setTrades(this.state.trades.filter(t => t.id !== id), { expandedId: null }); }
+  updateForm(field, val) { this.setState({ form: { ...this.state.form, [field]: val }, formError: '' }); }
 
   addTrade() {
     const f = this.state.form;
-    if (!f.name || !f.qty || !f.buyPrice || !f.sellPrice || !f.buyDate || !f.sellDate) {
-      this.setState({ formError: '종목·수량·날짜·가격을 모두 입력해주세요.' });
-      return;
-    }
-    const t = {
-      id: uid(), name: f.name.trim(),
-      qty: parseFloat(String(f.qty).replace(/[^0-9.]/g, '')),
-      buyDate: f.buyDate, buyPrice: parseFloat(String(f.buyPrice).replace(/[^0-9.]/g, '')),
-      sellDate: f.sellDate, sellPrice: parseFloat(String(f.sellPrice).replace(/[^0-9.]/g, '')),
-      memo: f.memo.trim()
-    };
-    this.setTrades([...this.state.trades, t], {
-      form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' },
-      formError: '', tab: 'list', expandedId: t.id
-    });
+    if (!f.name || !f.qty || !f.buyPrice || !f.sellPrice || !f.buyDate || !f.sellDate) { this.setState({ formError: '종목·수량·날짜·가격을 모두 입력해주세요.' }); return; }
+    const t = { id: uid(), name: f.name.trim(), qty: parseFloat(String(f.qty).replace(/[^0-9.]/g, '')), buyDate: f.buyDate, buyPrice: parseFloat(String(f.buyPrice).replace(/[^0-9.]/g, '')), sellDate: f.sellDate, sellPrice: parseFloat(String(f.sellPrice).replace(/[^0-9.]/g, '')), memo: f.memo.trim() };
+    this.setTrades([...this.state.trades, t], { form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' }, formError: '', tab: 'list', expandedId: t.id });
   }
 
   importPaste() {
@@ -408,194 +490,200 @@ class Component extends DCLogic {
       if (!line.trim()) return;
       const c = line.split(/\t|,|\s{2,}/).map(s => s.trim()).filter(s => s !== '');
       if (c.length < 6) return;
-      const name = c[0];
-      const qty = parseFloat(c[1].replace(/[^0-9.]/g, ''));
-      const bp = parseFloat(c[2].replace(/[^0-9.]/g, ''));
-      const bd = normDate(c[3]);
-      const sp = parseFloat(c[4].replace(/[^0-9.]/g, ''));
-      const sd = normDate(c[5]);
-      const memo = c.slice(6).join(' ');
+      const name = c[0], qty = parseFloat(c[1].replace(/[^0-9.]/g, '')), bp = parseFloat(c[2].replace(/[^0-9.]/g, '')), bd = normDate(c[3]), sp = parseFloat(c[4].replace(/[^0-9.]/g, '')), sd = normDate(c[5]), memo = c.slice(6).join(' ');
       if (!name || !qty || !bp || !sp || !/\d{4}-\d{2}-\d{2}/.test(bd) || !/\d{4}-\d{2}-\d{2}/.test(sd)) return;
       out.push({ id: uid(), name, qty, buyDate: bd, buyPrice: bp, sellDate: sd, sellPrice: sp, memo });
     });
-    if (!out.length) {
-      this.setState({ importMsg: '인식된 매매가 없어요. 형식을 확인해주세요.', importOk: false });
-      return;
-    }
+    if (!out.length) { this.setState({ importMsg: '인식된 매매가 없어요. 형식을 확인해주세요.', importOk: false }); return; }
     this.setTrades([...this.state.trades, ...out], { pasteText: '', importMsg: out.length + '건을 불러왔어요.', importOk: true, tab: 'list' });
   }
 
-  // ---- charts ----
-  priceSeries(t) {
-    const n = Math.max(7, Math.min(36, t.hold + 1));
-    let seed = 0; for (let i = 0; i < t.id.length; i++) seed = (seed * 31 + t.id.charCodeAt(i)) >>> 0;
-    const rand = mulberry32(seed || 1);
-    const arr = [];
-    for (let i = 0; i < n; i++) {
-      const u = i / (n - 1);
-      const base = t.buyPrice + (t.sellPrice - t.buyPrice) * u;
-      const amp = t.buyPrice * 0.032;
-      arr.push(base + (rand() - 0.5) * 2 * amp * Math.sin(u * Math.PI));
+  handleFile(file) {
+    if (!file) return;
+    this.setState({ csvMsg: '파일 읽는 중…', csvOk: true });
+    const nm = (file.name || '').toLowerCase();
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        let rows;
+        if (nm.endsWith('.xlsx') || nm.endsWith('.xls')) {
+          if (typeof XLSX === 'undefined') { this.setState({ csvMsg: '엑셀 읽기 모듈 로딩 실패(인터넷 확인). CSV로 시도해보세요.', csvOk: false }); return; }
+          const wb = XLSX.read(new Uint8Array(rd.result), { type: 'array', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
+        } else {
+          rows = parseCsvRows(decodeBuf(rd.result));
+        }
+        const parsed = parseLedger(rows).map(t => ({ id: uid(), name: t.name, qty: t.qty, buyDate: t.buyDate, buyPrice: Math.round(t.buyPrice), sellDate: t.sellDate, sellPrice: Math.round(t.sellPrice), memo: '' }));
+        if (!parsed.length) { this.setState({ csvMsg: '인식된 매매가 없어요. 삼성증권 거래내역(체결) 파일인지 확인해주세요.', csvOk: false }); return; }
+        this.setTrades([...this.state.trades, ...parsed], { csvMsg: parsed.length + '건의 매매를 불러왔어요. (USD·입출금 제외)', csvOk: true, tab: 'list' });
+      } catch (err) { this.setState({ csvMsg: '파일을 읽지 못했어요: ' + (err && err.message || err), csvOk: false }); }
+    };
+    rd.readAsArrayBuffer(file);
+  }
+
+  // ---- 실제 시세 ----
+  async proxyText(url) {
+    const order = this.goodProxy >= 0 ? [this.goodProxy, ...PROXIES.keys()].filter((v, i, a) => a.indexOf(v) === i) : [...PROXIES.keys()];
+    let lastErr;
+    for (const i of order) {
+      try {
+        const r = await fetch(PROXIES[i](url)); if (!r.ok) throw new Error('http');
+        let txt = await r.text();
+        try { const o = JSON.parse(txt); if (o && typeof o.contents === 'string') txt = o.contents; } catch (e) {}
+        this.goodProxy = i; return txt;
+      } catch (e) { lastErr = e; }
     }
-    arr[0] = t.buyPrice; arr[n - 1] = t.sellPrice;
-    return arr;
+    throw lastErr || new Error('proxy fail');
+  }
+  parseSise(text) {
+    const arr = JSON.parse(String(text).trim().replace(/'/g, '"'));
+    const rows = arr.slice(1).filter(r => Array.isArray(r) && r.length >= 5 && typeof r[4] === 'number');
+    return rows.map(r => { const s = String(r[0]); return { t: new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)).getTime(), c: r[4] }; }).sort((a, b) => a.t - b.t);
+  }
+  async fetchSise(code, start, end) {
+    const url = 'https://api.finance.naver.com/siseJson.naver?symbol=' + code + '&requestType=1&startTime=' + start + '&endTime=' + end + '&timeframe=day';
+    return this.parseSise(await this.proxyText(url));
+  }
+  async resolveCode(name) {
+    if (!name) return null;
+    const nk = String(name).replace(/\s/g, '');
+    if (CODE_MAP[nk]) return CODE_MAP[nk];
+    const lk = 'code_' + nk;
+    try { const cv = localStorage.getItem(lk); if (cv) return cv === '__none' ? null : cv; } catch (e) {}
+    try {
+      const txt = await this.proxyText('https://ac.stock.naver.com/ac?q=' + encodeURIComponent(name) + '&target=stock');
+      let code = null;
+      try { const j = JSON.parse(txt); const items = j.items || []; let it = items.find(x => String(x.name || '').replace(/\s/g, '') === nk) || items[0]; if (it) { const m = String(it.code || it.reutersCode || '').match(/(\d{6})/); if (m) code = m[1]; } } catch (e) {}
+      if (!code) { const m = txt.match(/"code"\s*:\s*"?(\d{6})/) || txt.match(/(\d{6})/); if (m) code = m[1]; }
+      try { localStorage.setItem(lk, code || '__none'); } catch (e) {}
+      return code;
+    } catch (e) { return null; }
   }
 
   setupCanvas(el, cssW, cssH) {
     const dpr = window.devicePixelRatio || 1;
-    el.width = Math.round(cssW * dpr);
-    el.height = Math.round(cssH * dpr);
-    const ctx = el.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssW, cssH);
+    el.width = Math.round(cssW * dpr); el.height = Math.round(cssH * dpr);
+    const ctx = el.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, cssW, cssH);
     return ctx;
   }
-
-  rgba(hex, a) {
-    if (hex === RED) return 'rgba(240,68,82,' + a + ')';
-    if (hex === BLUE) return 'rgba(49,130,246,' + a + ')';
-    return 'rgba(140,149,161,' + a + ')';
-  }
+  rgba(hex, a) { if (hex === RED) return 'rgba(240,68,82,' + a + ')'; if (hex === BLUE) return 'rgba(49,130,246,' + a + ')'; return 'rgba(140,149,161,' + a + ')'; }
+  drawMsg(el, msg) { const W = el.clientWidth || 648, H = 250; const ctx = this.setupCanvas(el, W, H); ctx.font = '13px Pretendard, sans-serif'; ctx.fillStyle = '#B0B8C1'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(msg, W / 2, H / 2); }
 
   drawTradeChart(el, t) {
-    const W = el.clientWidth || 648, H = 240, padL = 16, padR = 16, padT = 36, padB = 32;
+    const code = t.code;
+    if (!code) {
+      if (t._noCode) { this.drawMsg(el, '종목코드를 찾지 못해 실제 차트를 표시할 수 없어요'); return; }
+      if (!t._resolving) { this.patchTrade(t.id, { _resolving: true }); this.resolveCode(t.name).then(c => this.patchTrade(t.id, { code: c || '', _noCode: !c, _resolving: false })); }
+      this.drawMsg(el, '종목코드 찾는 중…'); return;
+    }
+    const fromY = ymdOf(t.buyDate, -14), toY = todayYmd();
+    const ck = code + '|' + fromY + '|' + toY;
+    const s = this.priceCache[ck];
+    if (s === 'loading') { this.drawMsg(el, '실제 가격 불러오는 중…'); return; }
+    if (s === 'error') { this.drawMsg(el, '가격을 불러오지 못했어요 (다시 펼쳐보세요)'); return; }
+    if (!s) {
+      this.priceCache[ck] = 'loading';
+      this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
+      this.drawMsg(el, '실제 가격 불러오는 중…'); return;
+    }
+    this.drawRealChart(el, t, s);
+  }
+
+  drawRealChart(el, t, series) {
+    const W = el.clientWidth || 648, H = 250, padL = 14, padR = 14, padT = 42, padB = 34;
     const ctx = this.setupCanvas(el, W, H);
-    const s = this.priceSeries(t);
-    const min = Math.min(...s), max = Math.max(...s), range = (max - min) || 1, n = s.length;
-    const X = i => padL + (W - padL - padR) * (i / (n - 1));
+    const cs = series.map(p => p.c);
+    const bi = nearestIdx(series, parseD(t.buyDate).getTime());
+    const si = nearestIdx(series, parseD(t.sellDate).getTime());
+    const min = Math.min(...cs, t.buyPrice, t.sellPrice), max = Math.max(...cs, t.buyPrice, t.sellPrice);
+    const range = (max - min) || 1, n = series.length;
+    const X = i => padL + (W - padL - padR) * (n <= 1 ? 0.5 : i / (n - 1));
     const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
-    const pts = s.map((v, i) => [X(i), Y(v)]);
-    const color = t.color, buy = pts[0], sell = pts[n - 1];
-    // area
-    ctx.beginPath();
-    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-    ctx.lineTo(X(n - 1), H - padB); ctx.lineTo(X(0), H - padB); ctx.closePath();
-    ctx.fillStyle = this.rgba(color, 0.12); ctx.fill();
-    // buy reference dashed
-    ctx.save(); ctx.setLineDash([4, 5]); ctx.strokeStyle = '#E5E8EB'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, buy[1]); ctx.lineTo(W - padR, buy[1]); ctx.stroke(); ctx.restore();
-    // line
-    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.beginPath();
-    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-    ctx.stroke();
-    // markers
-    [[buy, '#8B95A1'], [sell, color]].forEach(([p, st]) => {
-      ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 6.2832);
-      ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = st; ctx.stroke();
-    });
-    // labels
-    ctx.font = '700 12.5px Pretendard, sans-serif'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#6B7684'; ctx.textAlign = 'left'; ctx.fillText('매수 ' + won(t.buyPrice), buy[0], buy[1] - 13);
-    ctx.fillStyle = color; ctx.textAlign = 'right'; ctx.fillText('매도 ' + won(t.sellPrice), sell[0], sell[1] - 13);
-    ctx.font = '11px Pretendard, sans-serif'; ctx.fillStyle = '#B0B8C1';
-    ctx.textAlign = 'left'; ctx.fillText(t.buyDate, padL, H - 10);
-    ctx.textAlign = 'right'; ctx.fillText(t.sellDate, W - padR, H - 10);
+    // 매도 이후 영역 음영
+    if (si < n - 1) { ctx.fillStyle = '#F7F8FA'; ctx.fillRect(X(si), padT, (W - padR) - X(si), H - padT - padB); }
+    // 종가 라인
+    ctx.strokeStyle = '#B0B8C1'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); series.forEach((p, i) => { const x = X(i), y = Y(p.c); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+    // 보유구간(매수~매도) 강조
+    ctx.strokeStyle = t.color; ctx.lineWidth = 2.6;
+    ctx.beginPath(); for (let i = bi; i <= si; i++) { const x = X(i), y = Y(series[i].c); i === bi ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+    // 구간 고점
+    let pk = bi; for (let i = bi; i <= si; i++) if (series[i].c > series[pk].c) pk = i;
+    const peak = series[pk];
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = '#C4C9CF'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, Y(peak.c)); ctx.lineTo(W - padR, Y(peak.c)); ctx.stroke(); ctx.setLineDash([]);
+    // 매수/매도 마커 (실제 체결가 위치)
+    const bx = X(bi), by = Y(t.buyPrice), sx = X(si), sy = Y(t.sellPrice);
+    const tri = (x, y, up, col) => { ctx.beginPath(); if (up) { ctx.moveTo(x, y - 7); ctx.lineTo(x - 6, y + 4); ctx.lineTo(x + 6, y + 4); } else { ctx.moveTo(x, y + 7); ctx.lineTo(x - 6, y - 4); ctx.lineTo(x + 6, y - 4); } ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); };
+    tri(bx, by, true, GRAY); tri(sx, sy, false, t.color);
+    // 라벨
+    ctx.font = '700 12px Pretendard, sans-serif'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#6B7684'; ctx.textAlign = 'left'; ctx.fillText('매수 ' + won(t.buyPrice), Math.min(bx, W - 120), by - 12);
+    ctx.fillStyle = t.color; ctx.textAlign = sx > W - 90 ? 'right' : 'left'; ctx.fillText('매도 ' + won(t.sellPrice), sx > W - 90 ? sx : sx + 2, sy - 12);
+    // 고점 라벨
+    ctx.font = '11px Pretendard, sans-serif'; ctx.fillStyle = '#8B95A1'; ctx.textAlign = 'right'; ctx.fillText('보유중 고점 ' + won(peak.c), W - padR, Y(peak.c) - 5);
+    // 날짜축
+    ctx.fillStyle = '#B0B8C1'; ctx.font = '11px Pretendard, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillText(t.buyDate.slice(5), padL, H - 10);
+    ctx.textAlign = 'right'; ctx.fillText('오늘', W - padR, H - 10);
+    // 매도 이후 요약 저장
+    const last = series[n - 1].c;
+    let afterMax = t.sellPrice; for (let i = si; i < n; i++) if (series[i].c > afterMax) afterMax = series[i].c;
+    const soldPeakGap = ((t.sellPrice - peak.c) / peak.c * 100);
+    const afterGap = ((last - t.sellPrice) / t.sellPrice * 100);
+    const afterMaxGap = ((afterMax - t.sellPrice) / t.sellPrice * 100);
+    let msg = '고점 대비 매도가: ' + (soldPeakGap >= -0.05 ? '고점 근처에서 매도 👍' : soldPeakGap.toFixed(1) + '% (고점보다 낮게 매도)');
+    if (si < n - 1) msg += ' · 매도 후 현재까지 ' + (afterGap >= 0 ? '+' : '') + afterGap.toFixed(1) + '% (최고 +' + Math.max(0, afterMaxGap).toFixed(1) + '%)';
+    this.priceCache['after_' + t.id] = msg;
   }
 
   drawEquity(el, enriched) {
     const W = el.clientWidth || 400, H = 90, padT = 10, padB = 10;
     const ctx = this.setupCanvas(el, W, H);
-    if (!enriched.length) {
-      ctx.font = '13px Pretendard, sans-serif'; ctx.fillStyle = '#C4C9CF';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('데이터 없음', W / 2, H / 2);
-      return;
-    }
+    if (!enriched.length) { ctx.font = '13px Pretendard, sans-serif'; ctx.fillStyle = '#C4C9CF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('데이터 없음', W / 2, H / 2); return; }
     const sorted = [...enriched].sort((a, b) => parseD(a.sellDate) - parseD(b.sellDate));
     let cum = 0; const vals = [0]; sorted.forEach(t => { cum += t.pnl; vals.push(cum); });
     const min = Math.min(...vals, 0), max = Math.max(...vals, 0), range = (max - min) || 1, n = vals.length;
     const X = i => (W) * (i / (n - 1));
     const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
     const color = cum >= 0 ? RED : BLUE, zeroY = Y(0);
-    // zero line
-    ctx.strokeStyle = '#EDF0F3'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(W, zeroY); ctx.stroke();
-    // area
-    ctx.beginPath();
-    vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
-    ctx.lineTo(X(n - 1), H - padB); ctx.lineTo(X(0), H - padB); ctx.closePath();
-    ctx.fillStyle = this.rgba(color, 0.14); ctx.fill();
-    // line
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
-    ctx.stroke();
+    ctx.strokeStyle = '#EDF0F3'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(W, zeroY); ctx.stroke();
+    ctx.beginPath(); vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))); ctx.lineTo(X(n - 1), H - padB); ctx.lineTo(X(0), H - padB); ctx.closePath(); ctx.fillStyle = this.rgba(color, 0.14); ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath(); vals.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))); ctx.stroke();
   }
 
   buildCalendar(enriched) {
     const [y, m] = this.state.calMonth.split('-').map(Number);
-    const first = new Date(y, m - 1, 1);
-    const startDow = first.getDay();
-    const daysInMonth = new Date(y, m, 0).getDate();
+    const first = new Date(y, m - 1, 1); const startDow = first.getDay(); const daysInMonth = new Date(y, m, 0).getDate();
     const byDay = {};
-    enriched.forEach(t => {
-      const d = parseD(t.sellDate);
-      if (d.getFullYear() === y && d.getMonth() === m - 1) {
-        const k = d.getDate();
-        if (!byDay[k]) byDay[k] = { pnl: 0, count: 0 };
-        byDay[k].pnl += t.pnl; byDay[k].count += 1;
-      }
-    });
-    let maxAbs = 1;
-    Object.values(byDay).forEach(v => { maxAbs = Math.max(maxAbs, Math.abs(v.pnl)); });
+    enriched.forEach(t => { const d = parseD(t.sellDate); if (d.getFullYear() === y && d.getMonth() === m - 1) { const k = d.getDate(); if (!byDay[k]) byDay[k] = { pnl: 0, count: 0 }; byDay[k].pnl += t.pnl; byDay[k].count += 1; } });
+    let maxAbs = 1; Object.values(byDay).forEach(v => { maxAbs = Math.max(maxAbs, Math.abs(v.pnl)); });
     const cells = [];
     for (let i = 0; i < startDow; i++) cells.push({ day: '', bg: 'transparent', border: 'transparent', dayColor: 'transparent', hasTrades: false });
     for (let day = 1; day <= daysInMonth; day++) {
-      const dow = (startDow + day - 1) % 7;
-      const dayColor = dow === 0 ? '#F04452' : (dow === 6 ? '#3182F6' : '#6B7684');
-      const info = byDay[day];
+      const dow = (startDow + day - 1) % 7; const dayColor = dow === 0 ? '#F04452' : (dow === 6 ? '#3182F6' : '#6B7684'); const info = byDay[day];
       if (info) {
-        const isWin = info.pnl >= 0;
-        const baseC = isWin ? RED : BLUE;
-        const alpha = 0.1 + 0.62 * Math.min(1, Math.abs(info.pnl) / maxAbs);
-        const strong = alpha > 0.42;
-        cells.push({
-          day: String(day),
-          bg: (isWin ? 'rgba(240,68,82,' : 'rgba(49,130,246,') + alpha.toFixed(2) + ')',
-          border: 'transparent',
-          dayColor: strong ? '#fff' : dayColor,
-          hasTrades: true,
-          pnlLabel: (info.pnl >= 0 ? '+' : '') + won(info.pnl),
-          pnlColor: strong ? '#fff' : baseC,
-          subColor: strong ? 'rgba(255,255,255,0.85)' : '#8B95A1',
-          countLabel: info.count + '건'
-        });
-      } else {
-        cells.push({ day: String(day), bg: '#FAFBFC', border: '#F2F4F6', dayColor, hasTrades: false });
-      }
+        const isWin = info.pnl >= 0; const baseC = isWin ? RED : BLUE; const alpha = 0.1 + 0.62 * Math.min(1, Math.abs(info.pnl) / maxAbs); const strong = alpha > 0.42;
+        cells.push({ day: String(day), bg: (isWin ? 'rgba(240,68,82,' : 'rgba(49,130,246,') + alpha.toFixed(2) + ')', border: 'transparent', dayColor: strong ? '#fff' : dayColor, hasTrades: true, pnlLabel: (info.pnl >= 0 ? '+' : '') + won(info.pnl), pnlColor: strong ? '#fff' : baseC, subColor: strong ? 'rgba(255,255,255,0.85)' : '#8B95A1', countLabel: info.count + '건' });
+      } else { cells.push({ day: String(day), bg: '#FAFBFC', border: '#F2F4F6', dayColor, hasTrades: false }); }
     }
     while (cells.length % 7) cells.push({ day: '', bg: 'transparent', border: 'transparent', dayColor: 'transparent', hasTrades: false });
-    let monthPnl = 0, monthCount = 0;
-    Object.values(byDay).forEach(v => { monthPnl += v.pnl; monthCount += v.count; });
-    return {
-      cells,
-      title: y + '년 ' + m + '월',
-      sumLabel: (monthPnl >= 0 ? '+' : '') + won(monthPnl) + '원',
-      sumColor: monthPnl >= 0 ? RED : BLUE,
-      countLabel: monthCount ? '· ' + monthCount + '건' : '· 0건'
-    };
+    let monthPnl = 0, monthCount = 0; Object.values(byDay).forEach(v => { monthPnl += v.pnl; monthCount += v.count; });
+    return { cells, title: y + '년 ' + m + '월', sumLabel: (monthPnl >= 0 ? '+' : '') + won(monthPnl) + '원', sumColor: monthPnl >= 0 ? RED : BLUE, countLabel: monthCount ? '· ' + monthCount + '건' : '· 0건' };
   }
 
-  shiftMonth(delta) {
-    let [y, m] = this.state.calMonth.split('-').map(Number);
-    m += delta;
-    if (m < 1) { m = 12; y -= 1; }
-    if (m > 12) { m = 1; y += 1; }
-    this.setState({ calMonth: y + '-' + String(m).padStart(2, '0') });
-  }
+  shiftMonth(delta) { let [y, m] = this.state.calMonth.split('-').map(Number); m += delta; if (m < 1) { m = 12; y -= 1; } if (m > 12) { m = 1; y += 1; } this.setState({ calMonth: y + '-' + String(m).padStart(2, '0') }); }
 
   renderVals() {
     this.scheduleDraw();
     const st = this.state;
     const enriched = this.getEnriched();
-
-    // stats
     const count = enriched.length;
     const totalInvested = enriched.reduce((a, t) => a + t.invested, 0);
     const totalPnl = enriched.reduce((a, t) => a + t.pnl, 0);
     const cumRet = totalInvested ? totalPnl / totalInvested : 0;
-    const wins = enriched.filter(t => t.isWin).length;
-    const losses = count - wins;
+    const wins = enriched.filter(t => t.isWin).length; const losses = count - wins;
     const winRate = count ? Math.round((wins / count) * 100) : 0;
     const avgRet = count ? enriched.reduce((a, t) => a + t.ret, 0) / count : 0;
     const avgHold = count ? Math.round(enriched.reduce((a, t) => a + t.hold, 0) / count) : 0;
@@ -604,77 +692,36 @@ class Component extends DCLogic {
       totalPnlLabel: (totalPnl >= 0 ? '+' : '') + won(totalPnl) + '원',
       pnlColor: totalPnl >= 0 ? RED : BLUE,
       cumRetLabel: '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
-      winRateLabel: winRate + '%',
-      winLossLabel: wins + '승 ' + losses + '패',
-      avgRetLabel: (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%',
-      avgRetColor: avgRet >= 0 ? RED : BLUE,
-      investedLabel: won(totalInvested) + '원',
-      avgHoldLabel: avgHold === 0 ? '당일' : avgHold + '일'
+      winRateLabel: winRate + '%', winLossLabel: wins + '승 ' + losses + '패',
+      avgRetLabel: (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%', avgRetColor: avgRet >= 0 ? RED : BLUE,
+      investedLabel: won(totalInvested) + '원', avgHoldLabel: avgHold === 0 ? '당일' : avgHold + '일'
     };
-
-    // filter chips
-    const names = [];
-    enriched.forEach(t => { if (names.indexOf(t.name) < 0) names.push(t.name); });
+    const names = []; enriched.forEach(t => { if (names.indexOf(t.name) < 0) names.push(t.name); });
     const chipDef = [{ key: '__all', label: '전체' }].concat(names.map(n => ({ key: n, label: n })));
-    const chips = chipDef.map(c => {
-      const active = st.filter === c.key;
-      return {
-        label: c.label,
-        bg: active ? '#191F28' : '#fff',
-        color: active ? '#fff' : '#4E5968',
-        border: active ? '#191F28' : '#E5E8EB',
-        onClick: () => this.setState({ filter: c.key })
-      };
-    });
-
+    const chips = chipDef.map(c => { const active = st.filter === c.key; return { label: c.label, bg: active ? '#191F28' : '#fff', color: active ? '#fff' : '#4E5968', border: active ? '#191F28' : '#E5E8EB', onClick: () => this.setState({ filter: c.key }) }; });
     const sorted = [...enriched].sort((a, b) => parseD(b.sellDate) - parseD(a.sellDate));
     const visibleTrades = st.filter === '__all' ? sorted : sorted.filter(t => t.name === st.filter);
-
-    // tabs
     const tabDef = [{ key: 'list', label: '매매 내역' }, { key: 'cal', label: '손익 캘린더' }, { key: 'add', label: '거래 추가' }];
-    const tabList = tabDef.map(tb => {
-      const active = st.tab === tb.key;
-      return {
-        label: tb.label,
-        bg: active ? '#fff' : 'transparent',
-        color: active ? '#191F28' : '#8B95A1',
-        shadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-        onClick: () => this.setState({ tab: tb.key })
-      };
-    });
-
+    const tabList = tabDef.map(tb => { const active = st.tab === tb.key; return { label: tb.label, bg: active ? '#fff' : 'transparent', color: active ? '#191F28' : '#8B95A1', shadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none', onClick: () => this.setState({ tab: tb.key }) }; });
     const cal = this.buildCalendar(enriched);
-
     const set = {
-      name: e => this.updateForm('name', e.target.value),
-      qty: e => this.updateForm('qty', e.target.value),
-      buyDate: e => this.updateForm('buyDate', e.target.value),
-      buyPrice: e => this.updateForm('buyPrice', e.target.value),
-      sellDate: e => this.updateForm('sellDate', e.target.value),
-      sellPrice: e => this.updateForm('sellPrice', e.target.value),
+      name: e => this.updateForm('name', e.target.value), qty: e => this.updateForm('qty', e.target.value),
+      buyDate: e => this.updateForm('buyDate', e.target.value), buyPrice: e => this.updateForm('buyPrice', e.target.value),
+      sellDate: e => this.updateForm('sellDate', e.target.value), sellPrice: e => this.updateForm('sellPrice', e.target.value),
       memo: e => this.updateForm('memo', e.target.value),
-      paste: e => this.setState({ pasteText: e.target.value, importMsg: '' })
+      paste: e => this.setState({ pasteText: e.target.value, importMsg: '' }),
+      csv: e => { const f = e.target.files && e.target.files[0]; if (f) this.handleFile(f); e.target.value = ''; }
     };
-
     return {
-      stats,
-      hasData: enriched.length > 0,
-      tabList,
+      stats, hasData: enriched.length > 0, tabList,
       isList: st.tab === 'list', isCal: st.tab === 'cal', isAdd: st.tab === 'add',
-      chips, visibleTrades,
-      hasTrades: count > 0 && visibleTrades.length > 0,
-      noTrades: visibleTrades.length === 0,
-      cal,
-      onPrevMonth: () => this.shiftMonth(-1),
-      onNextMonth: () => this.shiftMonth(1),
-      form: st.form, set,
-      formError: st.formError,
-      onAdd: () => this.addTrade(),
-      pasteText: st.pasteText,
-      onImport: () => this.importPaste(),
-      onFillSample: () => this.setState({ pasteText: '삼성전자\t100\t71200\t2026-05-02\t78500\t2026-05-14\t실적 기대\nSK하이닉스\t20\t172000\t2026-06-01\t185000\t2026-06-12\tHBM 수요\n카카오\t40\t52000\t2026-06-09\t49800\t2026-06-09\t당일 손절', importMsg: '' }),
-      importMsg: st.importMsg,
-      importMsgColor: st.importOk ? '#3182F6' : '#F04452',
+      chips, visibleTrades, hasTrades: count > 0 && visibleTrades.length > 0, noTrades: visibleTrades.length === 0,
+      cal, onPrevMonth: () => this.shiftMonth(-1), onNextMonth: () => this.shiftMonth(1),
+      form: st.form, set, formError: st.formError, onAdd: () => this.addTrade(),
+      pasteText: st.pasteText, onImport: () => this.importPaste(),
+      onFillSample: () => this.setState({ pasteText: '삼성전자\t100\t71200\t2026-05-02\t78500\t2026-05-14\t실적 기대\nNAVER\t20\t215000\t2026-06-01\t238000\t2026-06-12\tAI', importMsg: '' }),
+      importMsg: st.importMsg, importMsgColor: st.importOk ? '#3182F6' : '#F04452',
+      csvMsg: st.csvMsg, csvMsgColor: st.csvOk ? '#3182F6' : '#F04452',
       onLoadSample: () => this.setTrades(SAMPLE.map(t => ({ ...t })), { tab: 'list' }),
       onClearAll: () => this.setTrades([], { expandedId: null })
     };
