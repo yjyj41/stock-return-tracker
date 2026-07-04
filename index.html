@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 <x-dc>
@@ -116,7 +117,7 @@
                 </div>
                 <sc-if value="{{ t.expanded }}" hint-placeholder-val="{{ false }}">
                   <div style="padding:6px 18px 20px;border-top:1px solid #F2F4F6;">
-                    <canvas data-trade="{{ t.id }}" style="width:100%;height:250px;display:block;"></canvas>
+                    <div data-trade="{{ t.id }}" style="width:100%;height:250px;position:relative;"></div>
                     <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap;">
                       <div><div style="font-size:11px;color:#8B95A1;">매수</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.buyDate }} · {{ t.buyPriceLabel }}원</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">매도</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.sellDate }} · {{ t.sellPriceLabel }}원</div></div>
@@ -124,9 +125,7 @@
                       <div><div style="font-size:11px;color:#8B95A1;">실현손익</div><div style="font-size:13px;font-weight:700;margin-top:3px;color: {{ t.color }};">{{ t.pnlLabel }}</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">보유기간</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.holdLabel }}</div></div>
                     </div>
-                    <sc-if value="{{ t.afterInfo }}" hint-placeholder-val="{{ false }}">
-                      <div style="margin-top:12px;font-size:12.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;line-height:1.6;">{{ t.afterInfo }}</div>
-                    </sc-if>
+                    <div data-tvinfo="{{ t.id }}" style="margin-top:12px;font-size:12.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;line-height:1.6;">차트를 불러오는 중…</div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:16px;">
                       <sc-if value="{{ t.memo }}" hint-placeholder-val="메모">
                         <span style="font-size:13px;color:#4E5968;background:#F2F4F6;padding:8px 12px;border-radius:9px;">{{ t.memoLabel }}</span>
@@ -327,6 +326,7 @@ function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; le
 function ymdOf(dstr, addDays) { const d = parseD(dstr); if (addDays) d.setDate(d.getDate() + addDays); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
 function todayYmd() { const d = new Date(); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
 function nearestIdx(series, ms) { let bi = 0, bd = Infinity; for (let i = 0; i < series.length; i++) { const dd = Math.abs(series[i].t - ms); if (dd < bd) { bd = dd; bi = i; } } return bi; }
+function fmtT(ms) { const d = new Date(ms); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
 
 // ---- CSV/XLSX 파싱 ----
 function num(x) { if (x === null || x === undefined || x === '') return null; if (typeof x === 'number') return x; const v = parseFloat(String(x).replace(/,/g, '').trim()); return isNaN(v) ? null : v; }
@@ -442,9 +442,10 @@ class Component extends DCLogic {
     try {
       const enriched = this.getEnriched();
       document.querySelectorAll('canvas[data-eq]').forEach(c => this.drawEquity(c, enriched));
-      document.querySelectorAll('canvas[data-trade]').forEach(c => {
+      document.querySelectorAll('div[data-trade]').forEach(c => {
         const t = enriched.find(x => x.id === c.getAttribute('data-trade'));
-        if (t) this.drawTradeChart(c, t);
+        const info = document.querySelector('[data-tvinfo="' + c.getAttribute('data-trade') + '"]');
+        if (t) this.drawTradeChart(c, info, t);
       });
     } catch (err) {}
   }
@@ -589,12 +590,15 @@ class Component extends DCLogic {
   rgba(hex, a) { if (hex === RED) return 'rgba(240,68,82,' + a + ')'; if (hex === BLUE) return 'rgba(49,130,246,' + a + ')'; return 'rgba(140,149,161,' + a + ')'; }
   drawMsg(el, msg) { const W = el.clientWidth || 648, H = 250; const ctx = this.setupCanvas(el, W, H); ctx.font = '13px Pretendard, sans-serif'; ctx.fillStyle = '#B0B8C1'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(msg, W / 2, H / 2); }
 
-  drawTradeChart(el, t) {
+  setTvInfo(info, msg) { if (info) info.textContent = msg; }
+
+  drawTradeChart(el, info, t) {
+    if (typeof LightweightCharts === 'undefined') { this.setTvInfo(info, '차트 모듈 로딩 실패 — 인터넷 확인 후 새로고침하세요'); return; }
     const code = t.code;
     if (!code) {
-      if (t._noCode) { this.drawMsg(el, '종목코드를 찾지 못해 실제 차트를 표시할 수 없어요'); return; }
+      if (t._noCode) { this.setTvInfo(info, '종목코드를 찾지 못해 실제 차트를 표시할 수 없어요'); return; }
       if (!t._resolving) { this.patchTrade(t.id, { _resolving: true }); this.resolveCode(t.name).then(c => this.patchTrade(t.id, { code: c || '', _noCode: !c, _resolving: false })); }
-      this.drawMsg(el, '종목코드 찾는 중…'); return;
+      this.setTvInfo(info, '종목코드 찾는 중…'); return;
     }
     // 같은 종목의 모든 매매가 한 번의 요청을 공유하도록, 그 종목 '최초 매수일' 기준으로 받는다
     let earliest = t.buyDate;
@@ -605,72 +609,65 @@ class Component extends DCLogic {
     if (!s) { // 메모리에 없으면 브라우저 저장 캐시 확인 → 재접속/새로고침해도 즉시
       try { const raw = localStorage.getItem('pc_' + ck); if (raw) { const ser = JSON.parse(raw); if (Array.isArray(ser) && ser.length) s = this.priceCache[ck] = ser; } } catch (e) {}
     }
-    if (s === 'loading') { this.drawMsg(el, '실제 가격 불러오는 중…'); return; }
-    if (s === 'error') { this.drawMsg(el, '가격을 불러오지 못했어요 (다시 펼쳐보세요)'); return; }
+    if (s === 'loading') { this.setTvInfo(info, '실제 가격 불러오는 중…'); return; }
+    if (s === 'error') { this.setTvInfo(info, '가격을 불러오지 못했어요 — 접었다 다시 펼쳐보세요'); return; }
     if (!s) {
-      this.priceCache[ck] = 'loading';
+      this.priceCache[ck] = 'loading'; this.setTvInfo(info, '실제 가격 불러오는 중…');
       this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; if (ser.length) { try { localStorage.setItem('pc_' + ck, JSON.stringify(ser)); } catch (e) {} } this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
-      this.drawMsg(el, '실제 가격 불러오는 중…'); return;
+      return;
     }
     // 이 매매 건 창(매수 14일 전 ~ 오늘)으로 잘라서 표시
     const fromMs = parseD(t.buyDate).getTime() - 14 * 86400000;
-    const disp = s.filter(p => p.t >= fromMs);
-    this.drawRealChart(el, t, disp.length > 1 ? disp : s);
+    const win = s.filter(p => p.t >= fromMs);
+    const data = (win.length > 1 ? win : s).map(p => ({ time: fmtT(p.t), value: p.c }));
+    this.renderTv(el, info, t, data);
   }
 
-  drawRealChart(el, t, series) {
-    const W = el.clientWidth || 648, H = 250, padL = 14, padR = 14, padT = 42, padB = 34;
-    const ctx = this.setupCanvas(el, W, H);
-    const cs = series.map(p => p.c);
-    const bi = nearestIdx(series, parseD(t.buyDate).getTime());
-    const si = nearestIdx(series, parseD(t.sellDate).getTime());
-    const min = Math.min(...cs, t.buyPrice, t.sellPrice), max = Math.max(...cs, t.buyPrice, t.sellPrice);
-    const range = (max - min) || 1, n = series.length;
-    const X = i => padL + (W - padL - padR) * (n <= 1 ? 0.5 : i / (n - 1));
-    const Y = v => padT + (H - padT - padB) * (1 - (v - min) / range);
-    // 세로 날짜 격자 (뒤에 깔기)
-    const ticks = Math.min(6, Math.max(3, n - 1));
-    ctx.strokeStyle = '#F1F3F5'; ctx.lineWidth = 1;
-    for (let k = 0; k <= ticks; k++) { const gx = X(Math.round((n - 1) * k / ticks)); ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, H - padB); ctx.stroke(); }
-    // 매도 이후 영역 음영
-    if (si < n - 1) { ctx.fillStyle = '#F7F8FA'; ctx.fillRect(X(si), padT, (W - padR) - X(si), H - padT - padB); }
-    // 종가 라인
-    ctx.strokeStyle = '#B0B8C1'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.beginPath(); series.forEach((p, i) => { const x = X(i), y = Y(p.c); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
-    // 보유구간(매수~매도) 강조
-    ctx.strokeStyle = t.color; ctx.lineWidth = 2.6;
-    ctx.beginPath(); for (let i = bi; i <= si; i++) { const x = X(i), y = Y(series[i].c); i === bi ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
-    // 구간 고점
-    let pk = bi; for (let i = bi; i <= si; i++) if (series[i].c > series[pk].c) pk = i;
-    const peak = series[pk];
-    ctx.setLineDash([3, 4]); ctx.strokeStyle = '#C4C9CF'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, Y(peak.c)); ctx.lineTo(W - padR, Y(peak.c)); ctx.stroke(); ctx.setLineDash([]);
-    // 매수/매도 마커 (실제 체결가 위치)
-    const bx = X(bi), by = Y(t.buyPrice), sx = X(si), sy = Y(t.sellPrice);
-    const tri = (x, y, up, col) => { ctx.beginPath(); if (up) { ctx.moveTo(x, y - 7); ctx.lineTo(x - 6, y + 4); ctx.lineTo(x + 6, y + 4); } else { ctx.moveTo(x, y + 7); ctx.lineTo(x - 6, y - 4); ctx.lineTo(x + 6, y - 4); } ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); };
-    tri(bx, by, true, GRAY); tri(sx, sy, false, t.color);
-    // 라벨
-    ctx.font = '700 12px Pretendard, sans-serif'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#6B7684'; ctx.textAlign = 'left'; ctx.fillText('매수 ' + won(t.buyPrice), Math.min(bx, W - 120), by - 12);
-    ctx.fillStyle = t.color; ctx.textAlign = sx > W - 90 ? 'right' : 'left'; ctx.fillText('매도 ' + won(t.sellPrice), sx > W - 90 ? sx : sx + 2, sy - 12);
-    // 고점 라벨
-    ctx.font = '11px Pretendard, sans-serif'; ctx.fillStyle = '#8B95A1'; ctx.textAlign = 'right'; ctx.fillText('보유중 고점 ' + won(peak.c), W - padR, Y(peak.c) - 5);
-    // 날짜축 (촘촘하게 5~6개)
-    ctx.fillStyle = '#8B95A1'; ctx.font = '10.5px Pretendard, sans-serif';
-    for (let k = 0; k <= ticks; k++) {
-      const idx = Math.round((n - 1) * k / ticks); const d = new Date(series[idx].t);
-      ctx.textAlign = k === 0 ? 'left' : (k === ticks ? 'right' : 'center');
-      ctx.fillText((d.getMonth() + 1) + '.' + d.getDate(), X(idx), H - 9);
+  renderTv(el, info, t, data) {
+    if (!data.length) { this.setTvInfo(info, '가격 데이터가 없어요'); return; }
+    // 다른 매매로 넘어갈 때 이전 차트 정리
+    if (this._lastTvEl && this._lastTvEl !== el && this._lastTvEl._tv) { try { this._lastTvEl._tv.chart.remove(); } catch (e) {} this._lastTvEl._tv = null; }
+    this._lastTvEl = el;
+    let tv = el._tv;
+    if (!tv) {
+      el.innerHTML = '';
+      const chart = LightweightCharts.createChart(el, {
+        width: el.clientWidth || 640, height: 250,
+        layout: { background: { color: '#fff' }, textColor: '#8B95A1', fontFamily: 'Pretendard, sans-serif', fontSize: 11 },
+        rightPriceScale: { borderColor: '#EDF0F3' },
+        timeScale: { borderColor: '#EDF0F3', fixLeftEdge: true, fixRightEdge: true },
+        grid: { horzLines: { color: '#F4F6F8' }, vertLines: { color: '#F7F8FA' } },
+        crosshair: { mode: 0 }, handleScroll: false, handleScale: false
+      });
+      const area = chart.addAreaSeries({ lineColor: t.color, topColor: this.rgba(t.color, 0.18), bottomColor: 'rgba(255,255,255,0.02)', lineWidth: 2, priceLineVisible: false });
+      tv = el._tv = { chart, area, peak: null };
+    } else {
+      tv.chart.applyOptions({ width: el.clientWidth || 640 });
     }
-    // 매도 이후 요약 저장
-    const last = series[n - 1].c;
-    let afterMax = t.sellPrice; for (let i = si; i < n; i++) if (series[i].c > afterMax) afterMax = series[i].c;
-    const soldPeakGap = ((t.sellPrice - peak.c) / peak.c * 100);
-    const afterGap = ((last - t.sellPrice) / t.sellPrice * 100);
-    const afterMaxGap = ((afterMax - t.sellPrice) / t.sellPrice * 100);
-    let msg = '고점 대비 매도가: ' + (soldPeakGap >= -0.05 ? '고점 근처에서 매도 👍' : soldPeakGap.toFixed(1) + '% (고점보다 낮게 매도)');
-    if (si < n - 1) msg += ' · 매도 후 현재까지 ' + (afterGap >= 0 ? '+' : '') + afterGap.toFixed(1) + '% (최고 +' + Math.max(0, afterMaxGap).toFixed(1) + '%)';
-    this.priceCache['after_' + t.id] = msg;
+    tv.area.applyOptions({ lineColor: t.color, topColor: this.rgba(t.color, 0.18) });
+    tv.area.setData(data);
+    // 날짜에 자동 정렬되는 매수/매도 마커
+    const times = data.map(d => d.time);
+    const nearT = ds => { const tg = parseD(ds).getTime(); let best = times[0], bd = Infinity; times.forEach(tt => { const dd = Math.abs(parseD(tt).getTime() - tg); if (dd < bd) { bd = dd; best = tt; } }); return best; };
+    const buyT = nearT(t.buyDate), sellT = nearT(t.sellDate);
+    const markers = [
+      { time: buyT, position: 'belowBar', color: '#8B95A1', shape: 'arrowUp', text: '매수 ' + won(t.buyPrice) },
+      { time: sellT, position: 'aboveBar', color: t.color, shape: 'arrowDown', text: '매도 ' + won(t.sellPrice) }
+    ].sort((a, b) => parseD(a.time).getTime() - parseD(b.time).getTime());
+    tv.area.setMarkers(markers);
+    // 보유중 고점 가로선
+    if (tv.peak) { try { tv.area.removePriceLine(tv.peak); } catch (e) {} tv.peak = null; }
+    const bIdx = Math.max(0, times.indexOf(buyT)), sIdx = times.indexOf(sellT) < 0 ? data.length - 1 : times.indexOf(sellT);
+    let peak = -Infinity; for (let i = bIdx; i <= sIdx; i++) peak = Math.max(peak, data[i].value);
+    if (isFinite(peak) && peak > 0) tv.peak = tv.area.createPriceLine({ price: peak, color: '#C4C9CF', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '고점' });
+    tv.chart.timeScale().fitContent();
+    // 요약 텍스트 (현재가 포함)
+    const cur = data[data.length - 1].value;
+    const afterGap = ((cur - t.sellPrice) / t.sellPrice * 100);
+    const peakGap = ((t.sellPrice - peak) / peak * 100);
+    let msg = '현재가 ' + won(cur) + '원 (매도가 대비 ' + (afterGap >= 0 ? '+' : '') + afterGap.toFixed(1) + '%)';
+    msg += ' · 보유중 고점 ' + won(peak) + '원 (' + (peakGap >= -0.05 ? '고점 근처에서 매도 👍' : '고점보다 ' + Math.abs(peakGap).toFixed(1) + '% 낮게 매도') + ')';
+    this.setTvInfo(info, msg);
   }
 
   drawEquity(el, enriched) {
