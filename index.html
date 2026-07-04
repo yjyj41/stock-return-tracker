@@ -651,21 +651,28 @@ class Component extends DCLogic {
     const nearT = ds => { const tg = parseD(ds).getTime(); let best = times[0], bd = Infinity; times.forEach(tt => { const dd = Math.abs(parseD(tt).getTime() - tg); if (dd < bd) { bd = dd; best = tt; } }); return best; };
     const buyT = nearT(t.buyDate), sellT = nearT(t.sellDate);
     const markers = [
-      { time: buyT, position: 'belowBar', color: '#8B95A1', shape: 'arrowUp', text: '매수 ' + won(t.buyPrice) },
-      { time: sellT, position: 'aboveBar', color: t.color, shape: 'arrowDown', text: '매도 ' + won(t.sellPrice) }
+      { time: buyT, position: 'belowBar', color: '#8B95A1', shape: 'arrowUp', text: '매수' },
+      { time: sellT, position: 'aboveBar', color: t.color, shape: 'arrowDown', text: '매도' }
     ].sort((a, b) => parseD(a.time).getTime() - parseD(b.time).getTime());
     tv.area.setMarkers(markers);
-    // 보유중 고점 가로선
-    if (tv.peak) { try { tv.area.removePriceLine(tv.peak); } catch (e) {} tv.peak = null; }
+    // 실제 체결가 가로선(매수/매도) + 보유중 고점 — 정확한 가격 높이에 표시
+    if (tv.plines) { tv.plines.forEach(pl => { try { tv.area.removePriceLine(pl); } catch (e) {} }); }
+    tv.plines = [];
     const bIdx = Math.max(0, times.indexOf(buyT)), sIdx = times.indexOf(sellT) < 0 ? data.length - 1 : times.indexOf(sellT);
     let peak = -Infinity; for (let i = bIdx; i <= sIdx; i++) peak = Math.max(peak, data[i].value);
-    if (isFinite(peak) && peak > 0) tv.peak = tv.area.createPriceLine({ price: peak, color: '#C4C9CF', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '고점' });
+    const addLine = (price, color, title, style) => { if (isFinite(price) && price > 0) tv.plines.push(tv.area.createPriceLine({ price: price, color: color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title: title })); };
+    addLine(t.buyPrice, '#8B95A1', '매수 ' + won(t.buyPrice), 2);
+    addLine(t.sellPrice, t.color, '매도 ' + won(t.sellPrice), 0);
+    addLine(peak, '#C4C9CF', '고점 ' + won(peak), 3);
     tv.chart.timeScale().fitContent();
     // 요약 텍스트 (현재가 포함)
     const cur = data[data.length - 1].value;
+    let afterMax = t.sellPrice; for (let i = sIdx; i < data.length; i++) afterMax = Math.max(afterMax, data[i].value);
     const afterGap = ((cur - t.sellPrice) / t.sellPrice * 100);
+    const afterMaxGap = ((afterMax - t.sellPrice) / t.sellPrice * 100);
     const peakGap = ((t.sellPrice - peak) / peak * 100);
     let msg = '현재가 ' + won(cur) + '원 (매도가 대비 ' + (afterGap >= 0 ? '+' : '') + afterGap.toFixed(1) + '%)';
+    msg += ' · 매도 후 최고 ' + won(afterMax) + '원 (' + (afterMaxGap >= 0 ? '+' : '') + afterMaxGap.toFixed(1) + '%)';
     msg += ' · 보유중 고점 ' + won(peak) + '원 (' + (peakGap >= -0.05 ? '고점 근처에서 매도 👍' : '고점보다 ' + Math.abs(peakGap).toFixed(1) + '% 낮게 매도') + ')';
     this.setTvInfo(info, msg);
   }
