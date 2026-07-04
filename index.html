@@ -650,20 +650,23 @@ class Component extends DCLogic {
     const times = data.map(d => d.time);
     const nearT = ds => { const tg = parseD(ds).getTime(); let best = times[0], bd = Infinity; times.forEach(tt => { const dd = Math.abs(parseD(tt).getTime() - tg); if (dd < bd) { bd = dd; best = tt; } }); return best; };
     const buyT = nearT(t.buyDate), sellT = nearT(t.sellDate);
-    const markers = [
-      { time: buyT, position: 'belowBar', color: '#8B95A1', shape: 'arrowUp', text: '매수' },
-      { time: sellT, position: 'aboveBar', color: t.color, shape: 'arrowDown', text: '매도' }
-    ].sort((a, b) => parseD(a.time).getTime() - parseD(b.time).getTime());
-    tv.area.setMarkers(markers);
-    // 실제 체결가 가로선(매수/매도) + 보유중 고점 — 정확한 가격 높이에 표시
-    if (tv.plines) { tv.plines.forEach(pl => { try { tv.area.removePriceLine(pl); } catch (e) {} }); }
-    tv.plines = [];
     const bIdx = Math.max(0, times.indexOf(buyT)), sIdx = times.indexOf(sellT) < 0 ? data.length - 1 : times.indexOf(sellT);
     let peak = -Infinity; for (let i = bIdx; i <= sIdx; i++) peak = Math.max(peak, data[i].value);
-    const addLine = (price, color, title, style) => { if (isFinite(price) && price > 0) tv.plines.push(tv.area.createPriceLine({ price: price, color: color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title: title })); };
-    addLine(t.buyPrice, '#8B95A1', '매수 ' + won(t.buyPrice), 2);
-    addLine(t.sellPrice, t.color, '매도 ' + won(t.sellPrice), 0);
-    addLine(peak, '#C4C9CF', '고점 ' + won(peak), 3);
+    // 매매 지점을 '실제 체결가 높이'에 점으로 표시 → 매수가>매도가면 매수 점이 위에 온다
+    if (!tv.trade) { tv.trade = tv.chart.addLineSeries({ color: t.color, lineWidth: 1, lineStyle: 2, pointMarkersVisible: true, pointMarkersRadius: 5, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }); }
+    tv.trade.applyOptions({ color: t.color });
+    const tradePts = (buyT === sellT)
+      ? [{ time: buyT, value: t.buyPrice }]
+      : [{ time: buyT, value: t.buyPrice }, { time: sellT, value: t.sellPrice }].sort((a, b) => parseD(a.time).getTime() - parseD(b.time).getTime());
+    tv.trade.setData(tradePts);
+    tv.trade.setMarkers([
+      { time: buyT, position: 'belowBar', color: '#8B95A1', shape: 'arrowUp', text: '매수 ' + won(t.buyPrice) },
+      { time: sellT, position: 'aboveBar', color: t.color, shape: 'arrowDown', text: '매도 ' + won(t.sellPrice) }
+    ].sort((a, b) => parseD(a.time).getTime() - parseD(b.time).getTime()));
+    // 보유중 고점만 가로선으로
+    if (tv.plines) { tv.plines.forEach(pl => { try { tv.area.removePriceLine(pl); } catch (e) {} }); }
+    tv.plines = [];
+    if (isFinite(peak) && peak > 0) tv.plines.push(tv.area.createPriceLine({ price: peak, color: '#C4C9CF', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '고점 ' + won(peak) }));
     tv.chart.timeScale().fitContent();
     // 요약 텍스트 (현재가 포함)
     const cur = data[data.length - 1].value;
