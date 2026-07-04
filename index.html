@@ -104,10 +104,14 @@
                     <div style="font-size:15px;font-weight:700;letter-spacing:-0.02em;">{{ t.name }}</div>
                     <div style="font-size:12px;color:#8B95A1;margin-top:3px;">{{ t.qtyLabel }} · 보유 {{ t.holdLabel }}</div>
                   </div>
-                  <div style="flex:1;display:flex;align-items:center;gap:8px;font-size:13.5px;">
+                  <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:150px;">
                     <span style="color:#8B95A1;">{{ t.buyPriceLabel }}</span>
                     <span style="color:#C4C9CF;font-size:12px;">→</span>
                     <span style="font-weight:600;color:#4E5968;">{{ t.sellPriceLabel }}</span>
+                  </div>
+                  <div style="flex:1;text-align:right;min-width:110px;">
+                    <div style="font-size:11px;color:#B0B8C1;">현재가</div>
+                    <div style="margin-top:2px;font-size:13.5px;"><span style="font-weight:700;color: {{ t.curColor }};">{{ t.curLabel }}</span> <span style="font-size:11px;color: {{ t.curColor }};">{{ t.curPct }}</span></div>
                   </div>
                   <div style="flex:0 0 auto;text-align:right;min-width:92px;">
                     <div style="font-size:15.5px;font-weight:800;letter-spacing:-0.02em;color: {{ t.color }};">{{ t.retLabel }}</div>
@@ -410,8 +414,9 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this.priceCache = {};
+    this.lastPrice = {};
     this.goodProxy = -1;
-    try { const today = todayYmd(); Object.keys(localStorage).forEach(k => { if (k.indexOf('pc_') === 0 && !k.endsWith(today)) localStorage.removeItem(k); }); } catch (e) {}
+    try { const today = todayYmd(); Object.keys(localStorage).forEach(k => { if (k.indexOf('pc') === 0 && !k.endsWith(today)) localStorage.removeItem(k); }); } catch (e) {}
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) this.setState({ trades: t }); }
@@ -448,8 +453,24 @@ class Component extends DCLogic {
         const info = document.querySelector('[data-tvinfo="' + c.getAttribute('data-trade') + '"]');
         if (t) this.drawTradeChart(c, info, t);
       });
+      this.ensureLastPrices();
     } catch (err) {}
   }
+
+  // 각 종목의 현재가(최근 종가)를 미리 받아 목록에 바로 표시
+  ensureLastPrices() {
+    if (!this.lastPrice) this.lastPrice = {};
+    const fromY = ymdOf(new Date().toISOString().slice(0, 10), -12), toY = todayYmd();
+    const codes = [];
+    this.state.trades.forEach(t => { const c = t.code || CODE_MAP[String(t.name).replace(/\s/g, '')]; if (c && this.lastPrice[c] === undefined && codes.indexOf(c) < 0) codes.push(c); });
+    codes.forEach(code => {
+      this.lastPrice[code] = 'loading';
+      this.fetchSise(code, fromY, toY)
+        .then(ser => { this.lastPrice[code] = ser.length ? ser[ser.length - 1].c : 'error'; this.queuePriceRender(); })
+        .catch(() => { this.lastPrice[code] = 'error'; this.queuePriceRender(); });
+    });
+  }
+  queuePriceRender() { clearTimeout(this._prt); this._prt = setTimeout(() => this.setState({ _tick: (this.state._tick || 0) + 1 }), 150); }
 
   save(trades) { try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {} }
   setTrades(trades, extra) { this.setState({ trades, ...(extra || {}) }, () => this.save(trades)); }
@@ -463,9 +484,19 @@ class Component extends DCLogic {
     const isWin = pnl >= 0;
     const color = isWin ? RED : BLUE;
     const nk = String(t.name).replace(/\s/g, '');
+    const codeR = t.code || CODE_MAP[nk] || '';
+    const lp = this.lastPrice ? this.lastPrice[codeR] : undefined;
+    let curLabel = '⋯', curColor = '#B0B8C1', curPct = '';
+    if (typeof lp === 'number') {
+      curLabel = won(lp);
+      const g = t.sellPrice ? (lp - t.sellPrice) / t.sellPrice * 100 : 0;
+      curColor = g >= 0 ? RED : BLUE;
+      curPct = '(' + (g >= 0 ? '+' : '') + g.toFixed(1) + '%)';
+    } else if (lp === 'error') { curLabel = '–'; }
     return {
       ...t, invested, pnl, ret, hold, isWin, color,
-      code: t.code || CODE_MAP[nk] || '',
+      code: codeR,
+      curLabel, curColor, curPct,
       qtyLabel: t.qty + '주',
       buyPriceLabel: won(t.buyPrice),
       sellPriceLabel: won(t.sellPrice),
@@ -559,8 +590,8 @@ class Component extends DCLogic {
   }
   parseSise(text) {
     const arr = JSON.parse(String(text).trim().replace(/'/g, '"'));
-    const rows = arr.slice(1).filter(r => Array.isArray(r) && r.length >= 5 && typeof r[4] === 'number');
-    return rows.map(r => { const s = String(r[0]); return { t: new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)).getTime(), c: r[4] }; }).sort((a, b) => a.t - b.t);
+    const rows = arr.slice(1).filter(r => Array.isArray(r) && r.length >= 5 && [1, 2, 3, 4].every(i => typeof r[i] === 'number'));
+    return rows.map(r => { const s = String(r[0]); return { t: new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)).getTime(), o: r[1], h: r[2], l: r[3], c: r[4] }; }).sort((a, b) => a.t - b.t);
   }
   async fetchSise(code, start, end) {
     const url = 'https://api.finance.naver.com/siseJson.naver?symbol=' + code + '&requestType=1&startTime=' + start + '&endTime=' + end + '&timeframe=day';
@@ -608,19 +639,19 @@ class Component extends DCLogic {
     const ck = code + '|' + fromY + '|' + toY;
     let s = this.priceCache[ck];
     if (!s) { // 메모리에 없으면 브라우저 저장 캐시 확인 → 재접속/새로고침해도 즉시
-      try { const raw = localStorage.getItem('pc_' + ck); if (raw) { const ser = JSON.parse(raw); if (Array.isArray(ser) && ser.length) s = this.priceCache[ck] = ser; } } catch (e) {}
+      try { const raw = localStorage.getItem('pcx_' + ck); if (raw) { const ser = JSON.parse(raw); if (Array.isArray(ser) && ser.length && ser[0].h != null) s = this.priceCache[ck] = ser; } } catch (e) {}
     }
     if (s === 'loading') { this.setTvInfo(info, '실제 가격 불러오는 중…'); return; }
     if (s === 'error') { this.setTvInfo(info, '가격을 불러오지 못했어요 — 접었다 다시 펼쳐보세요'); return; }
     if (!s) {
       this.priceCache[ck] = 'loading'; this.setTvInfo(info, '실제 가격 불러오는 중…');
-      this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; if (ser.length) { try { localStorage.setItem('pc_' + ck, JSON.stringify(ser)); } catch (e) {} } this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
+      this.fetchSise(code, fromY, toY).then(ser => { this.priceCache[ck] = ser.length ? ser : 'error'; if (ser.length) { try { localStorage.setItem('pcx_' + ck, JSON.stringify(ser)); } catch (e) {} } this.scheduleDraw(); }).catch(() => { this.priceCache[ck] = 'error'; this.scheduleDraw(); });
       return;
     }
     // 이 매매 건 창(매수 14일 전 ~ 오늘)으로 잘라서 표시
     const fromMs = parseD(t.buyDate).getTime() - 14 * 86400000;
     const win = s.filter(p => p.t >= fromMs);
-    const data = (win.length > 1 ? win : s).map(p => ({ time: fmtT(p.t), value: p.c }));
+    const data = (win.length > 1 ? win : s).map(p => ({ time: fmtT(p.t), open: p.o, high: p.h, low: p.l, close: p.c }));
     this.renderTv(el, info, t, data);
   }
 
@@ -640,19 +671,18 @@ class Component extends DCLogic {
         grid: { horzLines: { color: '#F4F6F8' }, vertLines: { color: '#F7F8FA' } },
         crosshair: { mode: 0 }, handleScroll: false, handleScale: false
       });
-      const area = chart.addAreaSeries({ lineColor: t.color, topColor: this.rgba(t.color, 0.18), bottomColor: 'rgba(255,255,255,0.02)', lineWidth: 2, priceLineVisible: false });
+      const area = chart.addCandlestickSeries({ upColor: '#F04452', downColor: '#3182F6', borderVisible: false, wickUpColor: '#F04452', wickDownColor: '#3182F6', priceLineVisible: false });
       tv = el._tv = { chart, area, peak: null };
     } else {
       tv.chart.applyOptions({ width: el.clientWidth || 640 });
     }
-    tv.area.applyOptions({ lineColor: t.color, topColor: this.rgba(t.color, 0.18) });
     tv.area.setData(data);
     // 날짜에 자동 정렬되는 매수/매도 마커
     const times = data.map(d => d.time);
     const nearT = ds => { const tg = parseD(ds).getTime(); let best = times[0], bd = Infinity; times.forEach(tt => { const dd = Math.abs(parseD(tt).getTime() - tg); if (dd < bd) { bd = dd; best = tt; } }); return best; };
     const buyT = nearT(t.buyDate), sellT = nearT(t.sellDate);
     const bIdx = Math.max(0, times.indexOf(buyT)), sIdx = times.indexOf(sellT) < 0 ? data.length - 1 : times.indexOf(sellT);
-    let peak = -Infinity; for (let i = bIdx; i <= sIdx; i++) peak = Math.max(peak, data[i].value);
+    let peak = -Infinity; for (let i = bIdx; i <= sIdx; i++) peak = Math.max(peak, data[i].high);
     // 매매 지점을 '실제 체결가 높이'에 점으로 표시 → 매수가>매도가면 매수 점이 위에 온다
     if (!tv.trade) { tv.trade = tv.chart.addLineSeries({ color: t.color, lineWidth: 1, lineStyle: 2, pointMarkersVisible: true, pointMarkersRadius: 5, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }); }
     tv.trade.applyOptions({ color: t.color });
@@ -670,8 +700,8 @@ class Component extends DCLogic {
     if (isFinite(peak) && peak > 0) tv.plines.push(tv.area.createPriceLine({ price: peak, color: '#C4C9CF', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '고점 ' + won(peak) }));
     tv.chart.timeScale().fitContent();
     // 요약 텍스트 (현재가 포함)
-    const cur = data[data.length - 1].value;
-    let afterMax = t.sellPrice; for (let i = sIdx; i < data.length; i++) afterMax = Math.max(afterMax, data[i].value);
+    const cur = data[data.length - 1].close;
+    let afterMax = t.sellPrice; for (let i = sIdx; i < data.length; i++) afterMax = Math.max(afterMax, data[i].high);
     const afterGap = ((cur - t.sellPrice) / t.sellPrice * 100);
     const afterMaxGap = ((afterMax - t.sellPrice) / t.sellPrice * 100);
     const peakGap = ((t.sellPrice - peak) / peak * 100);
