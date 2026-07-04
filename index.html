@@ -293,6 +293,7 @@ const KEY = 'suiknote_v1';
 
 // 실제 시세: 네이버 금융 (CORS 우회용 공개 프록시)
 const PROXIES = [
+  u => 'https://stock-proxy.yeonjoong41.workers.dev/?url=' + encodeURIComponent(u), // 전용 서버(빠름·안정)
   u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
   u => 'https://api.allorigins.win/get?url=' + encodeURIComponent(u),
   u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
