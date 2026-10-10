@@ -20,10 +20,25 @@ test('missing or invalid FX never produces a misleading partial combined total',
   assert.deepEqual(api.combined(ts,'net',{GBP:{rate:0,date:'2026-10-09'}}).missing,['GBP']);
   assert.equal(api.combined(ts,'net',rates).total,19000);
 });
-test('Samsung ledger is flagged as an estimate when summary is unavailable',()=>{
-  assert.equal(api.combined([trade('samsung-ledger',100)],'net',{}).estimated,true);
+test('Samsung gross ledger never becomes net profit or a partial combined net total',()=>{
+  const r=api.combined([trade('samsung-ledger',100),trade('trading212',3)],'net',rates);
+  assert.equal(r.missingNet,true);assert.equal(r.total,null);
+  assert.deepEqual(r.rows.map(t=>t.source),['trading212']);
+  assert.equal(api.combined([trade('samsung-ledger',100)],'net',{}).rows.length,0);
+  const complete=api.combined([trade('samsung-ledger',100),trade('samsung-summary',80)],'net',{});
+  assert.equal(complete.total,80);assert.equal(complete.missingNet,false);
   assert.equal(api.combined([trade('trading212',3,{reportedOnly:true})],'net',rates).estimated,true);
   assert.equal(api.combined([trade('trading212',3)],'reported',rates).comparisonMissing,true);
+});
+test('domestic and overseas views exclude each other and gross/manual records',()=>{
+  const ts=[trade('samsung-ledger',100),trade('samsung-summary',80),trade('trading212',3),trade('trading212-cfd',-5),trade(undefined,99),trade('trading212',2,{currency:'USD'})];
+  assert.deepEqual(api.netViews(ts,'domestic'),['samsung-summary:KRW']);
+  assert.deepEqual(api.netViews(ts,'overseas'),['trading212:GBP','trading212-cfd:GBP','trading212:USD']);
+  assert.deepEqual(api.netViews(ts,'combined'),[]);
+  assert.equal(api.preferredView(ts,'domestic','samsung-ledger:KRW'),'samsung-summary:KRW');
+  assert.equal(api.preferredView(ts,'domestic','trading212:GBP'),'samsung-summary:KRW');
+  assert.equal(api.preferredView(ts,'overseas','trading212-cfd:GBP'),'trading212-cfd:GBP');
+  assert.equal(api.preferredView([trade('samsung-ledger',100)],'domestic'),'samsung-summary:KRW');
 });
 test('currency pair, positive rate and valid rate date are required',()=>{
   assert.equal(api.parseRate({base:'GBP',quote:'KRW',rate:1800,date:'2026-10-09'},'GBP').rate,1800);

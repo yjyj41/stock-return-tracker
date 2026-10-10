@@ -7,7 +7,7 @@
 <title>수익노트 · 삼성증권 &amp; Trading 212</title>
 <script src="./support.js"></script>
 <script src="./importers.js"></script>
-<script src="./portfolio.js"></script>
+<script src="./portfolio.js?v=20261011-net-accounts"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -58,12 +58,13 @@
       <div style="font-size:13px;color:#8B95A1;font-weight:600;background:#fff;padding:8px 14px;border-radius:10px;">{{ stats.countLabel }}</div>
     </div>
 
+    <nav aria-label="계좌 구분" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+      <sc-for list="{{ accountTabs }}" as="at"><button aria-pressed="{{ at.active }}" onClick="{{ at.onClick }}" style="border:1px solid #E5E8EB;background: {{ at.bg }};color: {{ at.color }};padding:12px 15px;border-radius:12px;cursor:pointer;font-weight:800;">{{ at.label }}</button></sc-for>
+    </nav>
+    <sc-if value="{{ isCombined }}">
     <section aria-label="한국 영국 합산 손익" style="background:#fff;border-radius:20px;padding:20px;margin-bottom:22px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
       <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
         <div style="font-size:14px;font-weight:800;">한국 · 영국 합산 손익</div>
-        <div role="group" aria-label="손익 계산 기준" style="display:flex;gap:6px;">
-          <sc-for list="{{ profitBases }}" as="pb"><button aria-pressed="{{ pb.active }}" onClick="{{ pb.onClick }}" style="border:1px solid #E5E8EB;background: {{ pb.bg }};color: {{ pb.color }};padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">{{ pb.label }}</button></sc-for>
-        </div>
       </div>
       <div style="font-size:12px;color:#8B95A1;">{{ combinedTitle }}</div>
       <div aria-live="polite" style="font-size:32px;font-weight:800;letter-spacing:-0.035em;color: {{ combinedColor }};margin-top:5px;">{{ combinedTotal }}</div>
@@ -84,17 +85,20 @@
       </details>
       <div role="status" style="font-size:12px;color:#6B7684;line-height:1.7;margin-top:8px;">{{ fxStatus }}</div>
     </section>
-
+    </sc-if>
+    <sc-if value="{{ isAccount }}">
+    <div style="font-size:18px;font-weight:800;margin-bottom:14px;">{{ accountTitle }}</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" aria-label="증권사와 통화 선택">
       <sc-for list="{{ sourceViews }}" as="sv">
         <button onClick="{{ sv.onClick }}" style="border:1px solid #E5E8EB;background: {{ sv.bg }};color: {{ sv.color }};padding:9px 13px;border-radius:10px;cursor:pointer;font-weight:700;">{{ sv.label }}</button>
       </sc-for>
     </div>
+    <sc-if value="{{ isOverseas }}"><details style="margin-bottom:16px;font-size:12px;color:#6B7684;"><summary style="cursor:pointer;">Trading 212 앱 숫자와 비교</summary><div role="group" aria-label="손익 계산 기준" style="display:flex;gap:6px;margin-top:10px;"><sc-for list="{{ profitBases }}" as="pb"><button aria-pressed="{{ pb.active }}" onClick="{{ pb.onClick }}" style="border:1px solid #E5E8EB;background: {{ pb.bg }};color: {{ pb.color }};padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">{{ pb.label }}</button></sc-for></div></details></sc-if>
     <div role="status" style="font-size:12.5px;color:#6B7684;line-height:1.7;background:#fff;border-radius:12px;padding:13px 16px;margin-bottom:18px;">
       <div>{{ basisSummary }}</div>
       <details style="margin-top:5px;"><summary style="cursor:pointer;font-weight:600;">계산 기준 · 비용 내역</summary><div style="white-space:pre-line;margin-top:6px;">{{ basisDescription }}</div></details>
     </div>
-    <!-- dashboard -->
+    <!-- account dashboard: records and charts stay within the selected account -->
     <div class="dashboard-grid" style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:26px;">
       <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
         <div style="font-size:13px;color:#8B95A1;font-weight:600;margin-bottom:8px;">{{ pnlTitle }}</div>
@@ -128,6 +132,7 @@
         </div>
       </div>
     </div>
+    </sc-if>
 
     <!-- tabs -->
     <div style="display:inline-flex;gap:4px;background:#E8EBEE;padding:5px;border-radius:13px;margin-bottom:18px;">
@@ -194,8 +199,8 @@
         </sc-if>
         <sc-if value="{{ noTrades }}" hint-placeholder-val="{{ false }}">
           <div style="background:#fff;border-radius:16px;padding:54px 20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <div style="font-size:15px;font-weight:700;color:#4E5968;">아직 기록된 매매가 없어요</div>
-            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 삼성증권·Trading 212 파일을 올려보세요.</div>
+            <div style="font-size:15px;font-weight:700;color:#4E5968;">{{ emptyTitle }}</div>
+            <div style="font-size:13px;color:#8B95A1;margin-top:6px;line-height:1.7;">{{ emptyHelp }}</div>
           </div>
         </sc-if>
       </div>
@@ -247,56 +252,11 @@
 
     <!-- ADD VIEW -->
     <sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
-      <div class="entry-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-          <div style="font-size:15px;font-weight:800;margin-bottom:4px;">직접 입력</div>
-          <div style="font-size:12.5px;color:#8B95A1;margin-bottom:18px;">매매 한 건을 입력하면 실제 차트가 자동 생성돼요.</div>
-          <div style="display:flex;flex-direction:column;gap:13px;">
-            <div>
-              <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">종목명</div>
-              <input value="{{ form.name }}" onChange="{{ set.name }}" placeholder="예: 삼성전자" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">수량 (주)</div>
-                <input value="{{ form.qty }}" onChange="{{ set.qty }}" type="number" placeholder="100" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">메모 / 사유</div>
-                <input value="{{ form.memo }}" onChange="{{ set.memo }}" placeholder="실적 기대" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매수일</div>
-                <input value="{{ form.buyDate }}" onChange="{{ set.buyDate }}" type="date" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:10px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매수가 (원)</div>
-                <input value="{{ form.buyPrice }}" onChange="{{ set.buyPrice }}" type="number" placeholder="71200" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매도일</div>
-                <input value="{{ form.sellDate }}" onChange="{{ set.sellDate }}" type="date" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:10px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-              <div>
-                <div style="font-size:12px;color:#8B95A1;font-weight:600;margin-bottom:6px;">매도가 (원)</div>
-                <input value="{{ form.sellPrice }}" onChange="{{ set.sellPrice }}" type="number" placeholder="78500" style="width:100%;border:1px solid #E5E8EB;border-radius:10px;padding:11px 13px;font-size:14px;color:#191F28;background:#fff;" />
-              </div>
-            </div>
-            <button onClick="{{ onAdd }}" style="margin-top:4px;border:none;background:#3182F6;color:#fff;font-size:14.5px;font-weight:700;padding:13px;border-radius:11px;cursor:pointer;">매매 건 추가</button>
-            <sc-if value="{{ formError }}" hint-placeholder-val="{{ false }}">
-              <div style="font-size:12.5px;color:#F04452;text-align:center;">{{ formError }}</div>
-            </sc-if>
-          </div>
-        </div>
-
+      <div class="entry-grid" style="display:grid;grid-template-columns:1fr;gap:16px;">
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-size:15px;font-weight:800;margin-bottom:4px;">증권사 파일 불러오기</div>
-            <div style="font-size:12.5px;color:#6B7684;line-height:1.7;margin-bottom:14px;">삼성증권 <b>거래내역 또는 손익표</b>, Trading 212 <b>ISA/Invest·CFD 거래내역 CSV</b>를 자동 인식해요. 매입원가를 계산하려면 최초 매수부터 전체 내역을 올려 주세요. 통화와 파일 종류별로 나누어 표시합니다.<br><b>다시 불러오면 같은 파일 종류의 기존 기록을 교체합니다.</b> 직접 입력한 기록과 다른 종류의 기록은 보존됩니다.</div>
+            <div style="font-size:12.5px;color:#6B7684;line-height:1.7;margin-bottom:14px;">{{ uploadHelp }}<br><b>같은 종류의 파일을 다시 불러오면 해당 기록만 교체합니다.</b> 다른 계좌의 기록은 보존됩니다. 파일 종류를 자동 인식해 국내·해외 화면으로 이동합니다.</div>
             <label data-csvdrop style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px dashed #C4C9CF;border-radius:14px;padding:26px 16px;cursor:pointer;text-align:center;background:#fff;">
               <div style="font-size:26px;">📄</div>
               <div style="font-size:13.5px;font-weight:700;color:#4E5968;">여기에 파일을 드롭</div>
@@ -308,28 +268,13 @@
             </sc-if>
           </div>
 
-          <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <div style="font-size:15px;font-weight:800;margin-bottom:4px;">거래내역 붙여넣기</div>
-            <div style="font-size:12.5px;color:#8B95A1;line-height:1.6;margin-bottom:14px;">엑셀/HTS에서 복사한 내역을 붙여넣으세요. 한 줄에 한 건씩, 아래 순서로 (탭 또는 쉼표 구분):</div>
-            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11.5px;color:#4E5968;background:#F2F4F6;padding:10px 12px;border-radius:9px;margin-bottom:12px;line-height:1.7;">종목명 · 수량 · 매수가 · 매수일 · 매도가 · 매도일 · 메모</div>
-            <textarea value="{{ pasteText }}" onChange="{{ set.paste }}" placeholder="삼성전자	100	71200	2026-05-02	78500	2026-05-14	실적 기대" style="width:100%;height:100px;border:1px solid #E5E8EB;border-radius:11px;padding:12px 13px;font-size:13px;color:#191F28;resize:vertical;line-height:1.6;font-family:'SF Mono',ui-monospace,Menlo,monospace;"></textarea>
-            <div style="display:flex;gap:8px;margin-top:12px;">
-              <button onClick="{{ onFillSample }}" style="flex:0 0 auto;border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:13.5px;font-weight:600;padding:11px 14px;border-radius:10px;cursor:pointer;">예시 채우기</button>
-              <button onClick="{{ onImport }}" style="flex:1;border:none;background:#191F28;color:#fff;font-size:13.5px;font-weight:700;padding:11px;border-radius:10px;cursor:pointer;">불러오기</button>
-            </div>
-            <sc-if value="{{ importMsg }}" hint-placeholder-val="{{ false }}">
-              <div style="font-size:12.5px;color: {{ importMsgColor }};text-align:center;margin-top:10px;">{{ importMsg }}</div>
-            </sc-if>
-          </div>
-
           <div style="background:#fff;border-radius:20px;padding:18px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div>
               <div style="font-size:13.5px;font-weight:700;">데이터 관리</div>
               <div style="font-size:12px;color:#8B95A1;margin-top:2px;">기록은 이 브라우저에 저장돼요.</div>
             </div>
             <div style="display:flex;gap:8px;">
-              <button onClick="{{ onLoadSample }}" style="border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">예시 데이터</button>
-              <button onClick="{{ onClearAll }}" style="border:1px solid #FDE2E4;background:#fff;color:#F04452;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">선택한 기록 삭제</button>
+              <button disabled="{{ clearDisabled }}" onClick="{{ onClearAll }}" style="border:1px solid #FDE2E4;background:#fff;color:#F04452;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">선택한 기록 삭제</button>
             </div>
           </div>
         </div>
@@ -405,7 +350,7 @@ const SAMPLE = [
 class Component extends DCLogic {
   state = {
     trades: [],
-    selectedView: 'manual:KRW',
+    selectedView: 'samsung-summary:KRW', accountScope: 'domestic',
     importNotes: {},
     profitBasis: 'net', fxRates: {}, fxDrafts: {}, fxBusy: false, fxError: '',
     tab: 'list',
@@ -426,7 +371,7 @@ class Component extends DCLogic {
     try {
       const storedRates = JSON.parse(localStorage.getItem(KEY + '_fx') || '{}');
       const fxRates = Object.fromEntries(Object.entries(storedRates || {}).filter(([c, rate]) => /^[A-Z]{3}$/.test(c) && StockPortfolio.validRate(rate)));
-      this.setState({ fxRates, profitBasis: localStorage.getItem(KEY + '_basis') === 'reported' ? 'reported' : 'net' });
+      this.setState({ fxRates, profitBasis: 'net' });
     } catch (e) {}
     this.priceCache = {};
     this.lastPrice = {};
@@ -436,9 +381,11 @@ class Component extends DCLogic {
       const raw = localStorage.getItem(KEY);
       if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) {
         const storedView = localStorage.getItem(KEY + '_view');
-        const selectedView = t.some(x => StockImports.viewKey(x) === storedView) ? storedView : (t.length ? StockImports.viewKey(t[0]) : 'manual:KRW');
+        const storedAccount = localStorage.getItem(KEY + '_account');
+        const accountScope = ['domestic', 'overseas', 'combined'].includes(storedAccount) ? storedAccount : 'domestic';
+        const selectedView = StockPortfolio.preferredView(t, accountScope, storedView);
         let importNotes = {}; try { importNotes = JSON.parse(localStorage.getItem(KEY + '_notes') || '{}'); } catch (e) {}
-        this.setState({ trades: t, selectedView, importNotes });
+        this.setState({ trades: t, selectedView, accountScope, importNotes });
       } }
     } catch (e) {}
     this._onResize = () => this.scheduleDraw();
@@ -500,7 +447,15 @@ class Component extends DCLogic {
     });
   }
 
-  getEnriched() { return this.state.trades.filter(t => StockImports.viewKey(t) === this.state.selectedView).map(t => this.enrich(t)); }
+  getEnriched() {
+    if (this.state.accountScope === 'combined') return [];
+    return this.state.trades.filter(t => StockPortfolio.accountFor(t.source) === this.state.accountScope && t.source !== 'samsung-ledger' && StockImports.viewKey(t) === this.state.selectedView).map(t => this.enrich(t));
+  }
+  selectAccount(accountScope) {
+    const selectedView = StockPortfolio.preferredView(this.state.trades, accountScope);
+    this.setState({ accountScope, selectedView, profitBasis: 'net', filter: '__all', expandedId: null, tab: 'list' });
+    try { localStorage.setItem(KEY + '_account', accountScope); localStorage.setItem(KEY + '_view', selectedView); } catch (e) {}
+  }
   selectView(selectedView) {
     this.setState({ selectedView, filter: '__all', expandedId: null });
     try { localStorage.setItem(KEY + '_view', selectedView); } catch (e) {}
@@ -524,7 +479,7 @@ class Component extends DCLogic {
     if (!this.lastPrice) this.lastPrice = {};
     const fromY = ymdOf(new Date().toISOString().slice(0, 10), -12), toY = todayYmd();
     const codes = [];
-    this.state.trades.forEach(t => { if (String(t.source || '').startsWith('trading212') || t.kind === 'summary') return; const c = t.code || CODE_MAP[String(t.name).replace(/\s/g, '')]; if (c && this.lastPrice[c] === undefined && codes.indexOf(c) < 0) codes.push(c); });
+    this.getEnriched().forEach(t => { if (String(t.source || '').startsWith('trading212') || t.kind === 'summary') return; const c = t.code || CODE_MAP[String(t.name).replace(/\s/g, '')]; if (c && this.lastPrice[c] === undefined && codes.indexOf(c) < 0) codes.push(c); });
     codes.forEach(code => {
       this.lastPrice[code] = 'loading';
       this.fetchSise(code, fromY, toY)
@@ -535,12 +490,16 @@ class Component extends DCLogic {
   queuePriceRender() { clearTimeout(this._prt); this._prt = setTimeout(() => this.setState({ _tick: (this.state._tick || 0) + 1 }), 150); }
 
   save(trades) { try { localStorage.setItem(KEY, JSON.stringify(trades)); localStorage.setItem(KEY + '_view', this.state.selectedView); } catch (e) {} }
-  setTrades(trades, extra) { this.setState({ trades, ...(extra || {}) }, () => this.save(trades)); }
+  setTrades(trades, extra) {
+    const options = extra || {}, accountScope = options.accountScope || this.state.accountScope;
+    const selectedView = StockPortfolio.preferredView(trades, accountScope, options.selectedView || this.state.selectedView);
+    this.setState({ trades, ...options, accountScope, selectedView }, () => this.save(trades));
+  }
   patchTrade(id, patch) { const trades = this.state.trades.map(t => t.id === id ? { ...t, ...patch } : t); this.setTrades(trades); }
 
   enrich(t) {
     const invested = Number.isFinite(t.invested) ? t.invested : t.buyPrice * t.qty;
-    const pnl = StockPortfolio.pnlFor(t, this.state.profitBasis);
+    const pnl = StockPortfolio.pnlFor(t, this.state.accountScope === 'domestic' ? 'net' : this.state.profitBasis);
     const currency = t.currency || 'KRW';
     const ret = invested ? pnl / invested : 0;
     const hold = daysBetween(t.buyDate, t.sellDate);
@@ -625,14 +584,16 @@ class Component extends DCLogic {
         }
         const result = StockImports.parseFile(rows);
         const trades = StockImports.replaceImport(this.state.trades, result);
-        const selectedView = StockImports.viewKey(result.trades[0]);
+        const accountScope = StockPortfolio.accountFor(result.source);
+        const selectedView = StockPortfolio.preferredView(trades, accountScope, StockImports.viewKey(result.trades[0]));
         const importNotes = { ...this.state.importNotes, [result.source]: result.warnings.join('\n') };
         try {
           localStorage.setItem(KEY + '_notes', JSON.stringify(importNotes));
           localStorage.setItem(KEY + '_view', selectedView);
+          localStorage.setItem(KEY + '_account', accountScope);
         } catch (e) {}
-        this.setTrades(trades, { selectedView, importNotes, filter: '__all', expandedId: null,
-          csvMsg: result.label + ' ' + result.trades.length + '건을 불러왔어요. 같은 종류의 이전 기록은 교체했어요.',
+        this.setTrades(trades, { selectedView, accountScope, profitBasis: 'net', importNotes, filter: '__all', expandedId: null,
+          csvMsg: result.source === 'samsung-ledger' ? (trades.some(t => t.source === 'samsung-summary') ? '거래내역을 보관했습니다. 화면의 순수익은 삼성증권 손익표를 사용합니다.' : '거래내역을 보관했습니다. 순수익을 확인하려면 순손익 열이 있는 삼성증권 손익표도 불러와 주세요.') : result.label + ' ' + result.trades.length + '건을 불러왔어요. 같은 종류의 이전 기록은 교체했어요.',
           csvOk: true, tab: 'list', calMonth: result.trades[result.trades.length - 1].sellDate.slice(0, 7) });
       } catch (err) { this.setState({ csvMsg: '파일을 읽지 못했어요: ' + (err && err.message || err), csvOk: false }); }
     };
@@ -822,14 +783,15 @@ class Component extends DCLogic {
   renderVals() {
     this.scheduleDraw();
     const st = this.state;
-    const portfolio = StockPortfolio.combined(st.trades, st.profitBasis, st.fxRates);
+    const portfolio = StockPortfolio.combined(st.trades, 'net', st.fxRates);
+    const isDomestic = st.accountScope === 'domestic', isCombined = st.accountScope === 'combined';
     const signedMoney = (n, currency) => (n >= 0 ? '+' : '') + money(n, currency);
     const combinedNote = ['불러온 파일 전체 기간의 실현손익을 합산합니다.', '계좌별 기간은 아래에 표시합니다.'];
-    if (portfolio.excludedLedger) combinedNote.push('삼성 손익표를 우선 사용해 거래내역과 중복 합산하지 않습니다.');
+    if (portfolio.excludedLedger) combinedNote.push('삼성 거래내역의 비용 전 추정치는 합산에서 제외합니다.');
+    if (portfolio.missingNet) combinedNote.push('삼성 순손익표가 없어 전체 순수익을 확정할 수 없습니다. 순손익 열이 있는 삼성증권 손익표를 불러와 주세요.');
     if (portfolio.excludedManual) combinedNote.push('기존·직접 입력 기록은 합산에서 제외합니다.');
     if (portfolio.estimated) combinedNote.push('비용 차감 전 추정치 또는 비용 범위 미확인 거래가 포함되어 있습니다.');
     if (portfolio.comparisonMissing) combinedNote.push('일부 보고값이 없어 해당 거래는 비용 포함 값으로 표시합니다.');
-    if (st.profitBasis === 'reported') combinedNote.push('ISA CSV Result · CFD Result after FX fee 기준입니다. CFD 이자·배당 조정 등은 제외되므로 순손익과 다릅니다. 현재 앱의 조회기간·미실현손익 포함 범위와도 다를 수 있습니다.');
     const enriched = this.getEnriched();
     const count = enriched.length;
     const totalInvested = enriched.reduce((a, t) => a + t.invested, 0);
@@ -841,7 +803,7 @@ class Component extends DCLogic {
     const avgRet = count ? enriched.reduce((a, t) => a + t.ret, 0) / count : 0;
     const avgHold = count ? Math.round(enriched.reduce((a, t) => a + t.hold, 0) / count) : 0;
     const stats = {
-      countLabel: '총 ' + count + '건',
+      countLabel: isCombined ? portfolio.rows.length + '개 계좌' : '총 ' + count + '건',
       totalPnlLabel: (totalPnl >= 0 ? '+' : '') + money(totalPnl, st.selectedView.split(':')[1]),
       pnlColor: totalPnl >= 0 ? RED : BLUE,
       cumRetLabel: st.selectedView.startsWith('trading212-cfd:') ? '(증거금 수익률 미계산)' : hasUnknownCost ? '(매입원가 미확인)' : '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
@@ -849,12 +811,17 @@ class Component extends DCLogic {
       avgRetLabel: st.selectedView.startsWith('trading212-cfd:') ? '미계산' : hasUnknownCost ? '미확인' : (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%', avgRetColor: avgRet >= 0 ? RED : BLUE,
       investedLabel: st.selectedView.startsWith('trading212-cfd:') ? '자료 없음' : hasUnknownCost && !totalInvested ? '미확인' : money(totalInvested, st.selectedView.split(':')[1]), avgHoldLabel: (st.selectedView.startsWith('trading212-cfd:') ? enriched.some(t => t.unknownHold) : hasUnknownCost) || st.selectedView.startsWith('samsung-summary:') ? '–' : avgHold === 0 ? '당일' : avgHold + '일'
     };
+    if (!count) {
+      stats.totalPnlLabel = isDomestic ? '순손익표 필요' : '파일을 불러오세요';
+      stats.pnlColor = '#6B7684'; stats.cumRetLabel = '';
+      stats.winRateLabel = stats.winLossLabel = stats.avgRetLabel = stats.investedLabel = stats.avgHoldLabel = '–';
+    }
     const names = []; enriched.forEach(t => { if (names.indexOf(t.name) < 0) names.push(t.name); });
     const chipDef = [{ key: '__all', label: '전체' }].concat(names.map(n => ({ key: n, label: n })));
     const chips = chipDef.map(c => { const active = st.filter === c.key; return { label: c.label, bg: active ? '#191F28' : '#fff', color: active ? '#fff' : '#4E5968', border: active ? '#191F28' : '#E5E8EB', onClick: () => this.setState({ filter: c.key }) }; });
     const sorted = [...enriched].sort((a, b) => parseD(b.sellDate) - parseD(a.sellDate));
     const visibleTrades = st.filter === '__all' ? sorted : sorted.filter(t => t.name === st.filter);
-    const tabDef = [{ key: 'list', label: '매매 내역' }, { key: 'cal', label: '손익 캘린더' }, { key: 'add', label: '거래 추가' }];
+    const tabDef = (isCombined ? [] : [{ key: 'list', label: '매매 내역' }, { key: 'cal', label: '손익 캘린더' }]).concat([{ key: 'add', label: '파일 불러오기' }]);
     const tabList = tabDef.map(tb => { const active = st.tab === tb.key; return { label: tb.label, bg: active ? '#fff' : 'transparent', color: active ? '#191F28' : '#8B95A1', shadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none', onClick: () => this.setState({ tab: tb.key }) }; });
     const cal = this.buildCalendar(enriched);
     const set = {
@@ -866,9 +833,15 @@ class Component extends DCLogic {
       csv: e => { const f = e.target.files && e.target.files[0]; if (f) this.handleFile(f); e.target.value = ''; }
     };
     return {
+      isCombined, isAccount: !isCombined, isOverseas: st.accountScope === 'overseas',
+      accountTitle: isDomestic ? '국내주식 · 삼성증권' : '해외주식 · Trading 212',
+      accountTabs: [{key:'domestic',label:'국내 · 삼성증권'},{key:'overseas',label:'해외 · Trading 212'},{key:'combined',label:'전체 합산'}].map(a => ({...a, active:st.accountScope === a.key, bg:st.accountScope === a.key ? '#191F28' : '#fff', color:st.accountScope === a.key ? '#fff' : '#4E5968', onClick:() => this.selectAccount(a.key)})),
+      uploadHelp: isDomestic ? '삼성증권 순수익은 매매일자·매수금액·매도금액·순손익 열이 있는 손익표 XLSX를 불러오세요. 거래내역 파일만으로는 정확한 비용 차감 후 순수익을 확정할 수 없습니다.' : 'Trading 212 ISA/Invest 또는 CFD CSV를 불러오세요. ISA는 최초 매수부터 전체 내역이 필요합니다. ISA와 CFD는 별도 계좌로 표시합니다.',
+      emptyTitle: isDomestic ? '삼성증권 순손익표를 불러와 주세요' : 'Trading 212 거래내역을 불러와 주세요',
+      emptyHelp: isDomestic ? '파일 불러오기에서 순손익 열이 있는 손익표 XLSX를 선택하세요. 거래내역의 비용 차감 전 금액은 순수익으로 표시하지 않습니다.' : '파일 불러오기에서 ISA/Invest 또는 CFD CSV를 선택하세요. 국내주식 기록은 국내 · 삼성증권 화면에서 확인할 수 있습니다.',
       profitBases: [{key:'net',label:'비용 포함'},{key:'reported',label:'앱 표시 비교'}].map(b => ({ ...b, active:st.profitBasis === b.key, bg:st.profitBasis === b.key ? '#191F28' : '#fff', color:st.profitBasis === b.key ? '#fff' : '#6B7684', onClick:() => this.setProfitBasis(b.key) })),
-      combinedTitle: st.profitBasis === 'reported' ? 'CSV 보고손익 기준 · 적용 환율로 원화 환산' : portfolio.estimated ? '합산 손익 추정 · 적용 환율로 원화 환산' : '비용 포함 실현손익 · 적용 환율로 원화 환산',
-      combinedTotal: !portfolio.rows.length ? '파일을 불러오세요' : portfolio.total == null ? '환율 확인 필요' : signedMoney(portfolio.total, 'KRW'),
+      combinedTitle: portfolio.estimated ? '일부 비용 범위 미확인 · 계산 기준 확인 필요' : '비용 차감 후 실현손익 · 적용 환율로 원화 환산',
+      combinedTotal: portfolio.missingNet ? '삼성 순손익표 필요' : !portfolio.rows.length ? '파일을 불러오세요' : portfolio.total == null ? '환율 확인 필요' : signedMoney(portfolio.total, 'KRW'),
       combinedColor: portfolio.total != null && portfolio.total < 0 ? BLUE : RED,
       combinedNote: combinedNote.join(' '),
       combinedRows: portfolio.rows.map(r => ({ label:r.label, period:r.from + ' ~ ' + r.to + ' · ' + r.count + '건', amount:signedMoney(r.pnl,r.currency), converted:r.currency === 'KRW' ? '원화 기준' : r.krw == null ? '환율 미확인' : signedMoney(r.krw,'KRW') + ' · 1 ' + r.currency + ' = ' + r.rate.toLocaleString('ko-KR',{maximumFractionDigits:4}) + '원 (' + r.rateDate + ' · ' + r.rateSource + ')' })),
@@ -878,16 +851,16 @@ class Component extends DCLogic {
       investedTitle: st.selectedView.startsWith('trading212-cfd:') ? '증거금' : '매도분 매입원가',
       investedCaption: st.selectedView.startsWith('trading212-cfd:') ? '명목 거래금액을 투자금으로 계산하지 않음' : '확인된 매입원가 합계',
       holdingCaption: st.selectedView.startsWith('trading212-cfd:') ? '진입 → 청산' : '매수 → 매도',
-      basisSummary: st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? 'CSV 보고값 비교: ISA Result / CFD Result after FX fee 기준입니다. 비용 포함 순손익과 다를 수 있습니다.' : st.selectedView.startsWith('samsung-summary:') ? '파일의 순손익을 그대로 집계합니다. 삼성 거래내역의 종목별 추정손익과 별도로 표시합니다.' : st.selectedView.startsWith('samsung-ledger:') ? '수수료·세금·신용이자 차감 전 추정손익입니다. 정확한 순손익은 삼성증권 손익표로 확인하세요.' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산 Total result 기준입니다. 포함된 FX 수수료·이자·배당 조정을 중복 합산하지 않습니다.' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? '일부 거래는 원가·비용 포함 손익을 확인할 수 없어 CSV Result로 표시했습니다. 계산 기준을 확인하세요.' : '매수·매도 Total에 반영된 비용을 포함합니다. ISA/Invest와 CFD, 통화별 손익을 따로 표시합니다.') : '이전 버전에서 불러온 기록은 원본 파일을 다시 올려 수정된 계산을 적용하세요.',
-      sourceViews: [...new Set(st.trades.map(t => StockImports.viewKey(t)))].map(key => {
+      basisSummary: isDomestic && !count ? '정확한 순수익은 삼성증권 손익표의 순손익 열을 사용합니다. 거래내역 파일만 있다면 손익표도 불러와 주세요. 수수료·세금·신용이자 등의 비용 전 추정 금액은 순수익으로 표시하지 않습니다.' : st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? 'CSV 보고값 비교: ISA Result / CFD Result after FX fee 기준입니다. 비용 포함 순손익과 다를 수 있습니다.' : st.selectedView.startsWith('samsung-summary:') ? '파일의 순손익을 그대로 집계합니다. 삼성 거래내역의 종목별 추정손익과 별도로 표시합니다.' : st.selectedView.startsWith('samsung-ledger:') ? '수수료·세금·신용이자 차감 전 추정손익입니다. 정확한 순손익은 삼성증권 손익표로 확인하세요.' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산 Total result 기준입니다. 포함된 FX 수수료·이자·배당 조정을 중복 합산하지 않습니다.' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? '일부 거래는 원가·비용 포함 손익을 확인할 수 없어 CSV Result로 표시했습니다. 계산 기준을 확인하세요.' : '매수·매도 Total에 반영된 비용을 포함합니다. ISA/Invest와 CFD, 통화별 손익을 따로 표시합니다.') : '이전 버전에서 불러온 기록은 원본 파일을 다시 올려 수정된 계산을 적용하세요.',
+      sourceViews: StockPortfolio.netViews(st.trades, st.accountScope).map(key => {
         const [source, currency] = key.split(':');
         const label = ({ 'samsung-ledger': '삼성 거래내역 · 비용 전', 'samsung-summary': '삼성 손익표 · 순손익', trading212: 'Trading 212 ISA/Invest', 'trading212-cfd': 'Trading 212 CFD', manual: '기존·직접입력' })[source] || source;
         return { label: label + ' · ' + currency, bg: key === st.selectedView ? '#191F28' : '#fff', color: key === st.selectedView ? '#fff' : '#4E5968', onClick: () => this.selectView(key) };
       }),
-      pnlTitle: st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? (st.selectedView.startsWith('trading212-cfd:') ? 'CFD 보고손익 · FX 수수료 차감 후 · 이자 제외' : 'ISA/Invest 보고손익 · CSV Result 기준') : st.selectedView.startsWith('samsung-summary:') ? '증권사 순손익 · 수수료·세금 차감 후' : st.selectedView.startsWith('samsung-ledger:') ? '실현 매매손익 추정 · 비용 차감 전' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산손익 · Total result 기준' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? 'ISA/Invest 실현손익 · 비용 기준 확인' : 'ISA/Invest 실현손익 · 비용 포함 Total 기준') : '실현 매매손익 · 비용 차감 전',
-      basisDescription: (st.importNotes[st.selectedView.split(':')[0]] || (enriched.length ? '기존·직접 입력한 기록은 거래 가격 차이로 계산합니다. 이전에 불러온 파일의 계산 오류를 수정하려면 원본 파일을 다시 불러와 주세요.' : '거래 추가에서 파일을 불러오세요. 삼성증권 손익표는 정확한 순손익, 거래내역은 종목별 비용 차감 전 추정손익을 표시합니다. Trading 212는 통화별로 집계합니다.')),
-      stats, hasData: enriched.length > 0, tabList,
-      isList: st.tab === 'list', isCal: st.tab === 'cal', isAdd: st.tab === 'add',
+      pnlTitle: isDomestic ? '삼성증권 순수익 · 손익표의 비용 차감 후 순손익' : st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? (st.selectedView.startsWith('trading212-cfd:') ? 'CFD 보고손익 · FX 수수료 차감 후 · 이자 제외' : 'ISA/Invest 보고손익 · CSV Result 기준') : st.selectedView.startsWith('samsung-summary:') ? '증권사 순손익 · 수수료·세금 차감 후' : st.selectedView.startsWith('samsung-ledger:') ? '실현 매매손익 추정 · 비용 차감 전' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산손익 · Total result 기준' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? 'ISA/Invest 실현손익 · 비용 기준 확인' : 'ISA/Invest 실현손익 · 비용 포함 Total 기준') : '실현 매매손익 · 비용 차감 전',
+      basisDescription: st.importNotes[st.selectedView.split(':')[0]] || (isDomestic ? '순손익 열이 있는 삼성증권 손익표를 사용합니다. 파일에 반영된 수수료·세금을 다시 빼지 않습니다. 거래내역의 비용 전 추정치는 표시·합산하지 않습니다.' : 'ISA/Invest는 매수·매도 Total, CFD는 청산 Total result를 사용합니다. 각 항목에 이미 포함된 비용을 다시 차감하지 않습니다. 미실현손익과 입출금은 제외합니다.'),
+      stats, hasData: enriched.length > 0, clearDisabled: isCombined || !count, tabList,
+      isList: !isCombined && st.tab === 'list', isCal: !isCombined && st.tab === 'cal', isAdd: st.tab === 'add',
       chips, visibleTrades, hasTrades: count > 0 && visibleTrades.length > 0, noTrades: visibleTrades.length === 0,
       cal, onPrevMonth: () => this.shiftMonth(-1), onNextMonth: () => this.shiftMonth(1),
       form: st.form, set, formError: st.formError, onAdd: () => this.addTrade(),

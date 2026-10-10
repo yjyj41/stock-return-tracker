@@ -6,6 +6,16 @@
   'use strict';
   const finite = value => typeof value === 'number' && Number.isFinite(value);
   const labels = { 'samsung-summary': '삼성증권 손익표', 'samsung-ledger': '삼성증권 거래내역 추정', trading212: 'Trading 212 ISA/Invest', 'trading212-cfd': 'Trading 212 CFD' };
+  function accountFor(source) {
+    return String(source).startsWith('samsung-') ? 'domestic' : String(source).startsWith('trading212') ? 'overseas' : 'legacy';
+  }
+  function netViews(trades, account) {
+    return [...new Set(trades.filter(t => accountFor(t.source) === account && t.source !== 'samsung-ledger').map(t => t.source + ':' + (t.currency || 'KRW')))];
+  }
+  function preferredView(trades, account, requested) {
+    const views = netViews(trades, account);
+    return views.includes(requested) ? requested : views[0] || (account === 'overseas' ? 'trading212:GBP' : 'samsung-summary:KRW');
+  }
   function pnlFor(trade, basis) {
     if (basis === 'reported') {
       if (trade.source === 'trading212-cfd' && finite(trade.resultAfterFx)) return trade.resultAfterFx;
@@ -39,7 +49,10 @@
   }
   function combined(trades, basis, rates) {
     const useSummary = trades.some(t => t.source === 'samsung-summary');
-    const chosen = trades.filter(t => labels[t.source] && !(useSummary && t.source === 'samsung-ledger'));
+    const hasLedger = trades.some(t => t.source === 'samsung-ledger');
+    const missingNet = hasLedger && !useSummary;
+    // A ledger's gross estimate must never be substituted for Samsung net profit.
+    const chosen = trades.filter(t => labels[t.source] && t.source !== 'samsung-ledger');
     const groups = new Map();
     let estimated = false, comparisonMissing = false;
     for (const t of chosen) {
@@ -58,10 +71,10 @@
       if (!available) missing.push(g.currency);
       return { ...g, rate: available ? rate.rate : null, rateDate: available ? rate.date : '', rateSource: available ? rate.source : '', krw: available ? g.pnl * rate.rate : null };
     });
-    const total = missing.length || rows.some(r => !finite(r.pnl)) ? null : rows.reduce((s, r) => s + r.krw, 0);
-    return { rows, total, missing: [...new Set(missing)], estimated, comparisonMissing,
-      excludedLedger: useSummary && trades.some(t => t.source === 'samsung-ledger'),
+    const total = missingNet || missing.length || rows.some(r => !finite(r.pnl)) ? null : rows.reduce((s, r) => s + r.krw, 0);
+    return { rows, total, missing: [...new Set(missing)], missingNet, estimated, comparisonMissing,
+      excludedLedger: hasLedger,
       excludedManual: trades.some(t => !labels[t.source]) };
   }
-  return { pnlFor, validRate, parseRate, fetchRates, combined };
+  return { accountFor, netViews, preferredView, pnlFor, validRate, parseRate, fetchRates, combined };
 });
