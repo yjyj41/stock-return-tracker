@@ -59,30 +59,39 @@
     // Samsung's settlement export is reverse chronological and groups buys/sells
     // separately. Only date-level execution order is known: pool same-day buys.
     for (const e of [...executions].sort((a, b) => a.date.localeCompare(b.date) || (a.side === 'B' ? 0 : 1) - (b.side === 'B' ? 0 : 1) || a.row - b.row)) {
-      const key = e.name, p = positions.get(key) || { qty: 0, cost: 0, buyDate: e.date };
+      const key = e.name, p = positions.get(key) || { qty: 0, cost: 0, netCost: 0, costKnown: true, buyDate: e.date };
       if (e.side === 'B') {
         if (p.qty < EPS) p.buyDate = e.date;
         p.qty += e.qty; p.cost += e.qty * e.price;
+        p.netCost += e.qty * e.price + (e.costKnown ? e.fee : 0);
+        p.costKnown = p.costKnown && !!e.costKnown;
       } else {
         if (e.qty > p.qty + EPS) throw new Error(e.name + ' ' + e.date + ': 매도 ' + e.qty + '주의 매입원가가 부족해요. 최초 매수부터 전체 내역을 올려 주세요.');
-        const cost = p.cost * e.qty / p.qty, proceeds = e.qty * e.price;
+        const cost = p.cost * e.qty / p.qty, netCost = p.netCost * e.qty / p.qty, proceeds = e.qty * e.price;
         const roundKey = key + '|' + e.date;
-        const t = days.get(roundKey) || { name: key, qty: 0, invested: 0, proceeds: 0, buyDate: p.buyDate, sellDate: e.date };
+        const t = days.get(roundKey) || { name: key, qty: 0, invested: 0, netInvested: 0, proceeds: 0, netProceeds: 0, costKnown: true, executions: [], buyDate: p.buyDate, sellDate: e.date };
         t.qty += e.qty; t.invested += cost; t.proceeds += proceeds;
+        t.netInvested += netCost; t.netProceeds += proceeds - (e.costKnown ? e.fee : 0);
+        t.costKnown = t.costKnown && p.costKnown && !!e.costKnown;
+        t.executions.push({ date: e.date, side: 'S', qty: e.qty, price: e.price });
         if (p.buyDate < t.buyDate) t.buyDate = p.buyDate;
         days.set(roundKey, t);
-        p.qty -= e.qty; p.cost -= cost;
-        if (Math.abs(p.qty) < EPS) { p.qty = 0; p.cost = 0; }
+        p.qty -= e.qty; p.cost -= cost; p.netCost -= netCost;
+        if (Math.abs(p.qty) < EPS) { p.qty = 0; p.cost = 0; p.netCost = 0; p.costKnown = true; }
       }
       positions.set(key, p);
     }
     for (const t of days.values()) {
       trades.push({ ...t, buyPrice: t.invested / t.qty, sellPrice: t.proceeds / t.qty,
-        realizedPnl: t.proceeds - t.invested, source: 'samsung-ledger', currency: 'KRW',
-        basis: '매매손익 추정 · 비용 차감 전', id: 'samsung-ledger|' + stockId(t.name) + '|' + t.sellDate });
+        realizedPnl: t.proceeds - t.invested,
+        netPnl: t.costKnown ? t.netProceeds - t.netInvested : null,
+        fees: t.costKnown ? (t.netInvested - t.invested) + (t.proceeds - t.netProceeds) : null,
+        buyExecutions: executions.filter(e => e.name === t.name && e.side === 'B' && e.date >= t.buyDate && e.date <= t.sellDate).map(e => ({ date: e.date, side: e.side, qty: e.qty, price: e.price })),
+        source: 'samsung-ledger', currency: 'KRW',
+        basis: t.costKnown ? '입출금액의 수수료·세금 반영 · 이동평균 원가' : '비용 미확인 · 비용 전 추정손익', id: 'samsung-ledger|' + stockId(t.name) + '|' + t.sellDate });
     }
     const openPositions = [...positions].filter(([, p]) => p.qty > EPS).map(([name, p]) => ({ name, ...p }));
-    warnings.push('거래일자(결제일) 기준 · 일별 이동평균 매입원가 · 수수료·세금·신용이자 차감 전 추정치입니다. 정확한 순손익은 삼성증권 손익표를 함께 불러와 확인하세요.');
+    warnings.push('거래일자(결제일) 기준 · 일별 이동평균 매입원가입니다. 일반 현금거래는 일별 입출금액과 체결금액 차이의 비용을 반영합니다. 융자·현금금액 누락·혼합 원가는 비용 전 추정치로 표시합니다. 별도 신용이자·배당은 제외하며, 전체 순수익은 손익표로 확인하세요.');
     if (openPositions.length) warnings.push('보유 중인 ' + openPositions.length + '종목의 미실현손익은 제외했습니다.');
     return { trades, warnings, openPositions };
   }
@@ -98,9 +107,25 @@
       const side = type.includes('매수') ? 'B' : 'S';
       const q = quantity(r[c.amount + (side === 'S' ? 1 : 0)]), price = number(r[c.price]);
       if (!(q > 0) || !(price > 0)) throw new Error((i + 1) + '행의 수량·단가를 읽지 못했어요.');
-      executions.push({ date: date(r[c.date]), name, side, qty: q, price, row: i });
+      executions.push({ date: date(r[c.date]), name, side, qty: q, price, row: i,
+        credit: /융자|신용/.test(type), cash: number(r[c.amount + (side === 'B' ? 1 : 0)]), ambiguous: /\(/.test(text(r[c.amount + (side === 'S' ? 1 : 0)])) });
     }
     if (!executions.length) throw new Error('국내주식 매수·매도 내역이 없어요.');
+    // Cash is booked once for several fills (including NXT). Reconcile the group,
+    // then allocate its costs by execution value. Loan cash includes principal.
+    const groups = new Map();
+    for (const e of executions) {
+      const key = [e.date, e.name, e.side, e.credit].join('|');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
+    }
+    for (const group of groups.values()) {
+      const gross = group.reduce((s, e) => s + e.qty * e.price, 0);
+      const cash = group.reduce((s, e) => s + (e.cash || 0), 0);
+      const fee = group[0].side === 'B' ? cash - gross : gross - cash;
+      const known = !group.some(e => e.credit || e.ambiguous) && group.some(e => e.cash > 0) && fee >= -EPS;
+      for (const e of group) { e.costKnown = known; e.fee = known ? Math.max(0, fee) * e.qty * e.price / gross : 0; }
+    }
     return { ...matchExecutions(executions), label: '삼성증권 거래내역', source: 'samsung-ledger' };
   }
   function samsungSummary(rows, h) {

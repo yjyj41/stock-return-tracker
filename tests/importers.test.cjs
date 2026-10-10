@@ -3,6 +3,31 @@ const assert = require('node:assert/strict');
 const api = require('../importers.js');
 const ledgerHeader = ['거래일자','거래명','거래내용','통화코드','금액(수량)','','현금잔액','잔고수량','평가금액','거래단가'];
 const execution = (day, side, qty, price, name = '테스트') => [day,side,name,'',side === '매수' ? -qty : '',side === '매도' ? -qty : '',null,null,null,price];
+test('grouped cash costs cover multiple fills and partial sales without deducting held-stock fees',()=>{
+  const b1=execution('2026-01-02','매수',4,100); b1[5]=1010;
+  const b2=execution('2026-01-02','매수',6,100); b2[1]='매수_NXT';
+  const s1=execution('2026-01-03','매도',2,120); s1[4]=474;
+  const s2=execution('2026-01-03','매도',2,120); s2[1]='매도_NXT';
+  const r=api.parseFile([ledgerHeader,s1,s2,b1,b2]),t=r.trades[0];
+  assert.equal(t.realizedPnl,80); assert.equal(t.netPnl,70);
+  assert.equal(t.fees,10); assert.equal(t.costKnown,true);
+  assert.equal(r.openPositions[0].netCost,606);
+  assert.equal(t.buyExecutions.length,2);assert.equal(t.executions.length,2);
+});
+test('loan principal, missing cash and mixed credit inventory never become confirmed fees',()=>{
+  const b=execution('2026-01-02','매수',10,100);b[1]='융자매수';b[5]=400;
+  const s=execution('2026-01-03','매도',5,120);s[4]=590;
+  const t=api.parseFile([ledgerHeader,s,b]).trades[0];
+  assert.equal(t.realizedPnl,100);assert.equal(t.netPnl,null);assert.equal(t.fees,null);assert.equal(t.costKnown,false);
+  const cashBuy=execution('2026-01-02','매수',10,100);cashBuy[5]=1005;
+  const missing=api.parseFile([ledgerHeader,execution('2026-01-03','매도',5,120),cashBuy]).trades[0];
+  assert.equal(missing.netPnl,null);
+});
+test('fee(quantity) cash side stays unknown instead of silently omitting an extra charge',()=>{
+  const b=execution('2026-01-02','매수',10,100);b[5]=1005;
+  const s=execution('2026-01-03','매도',10,120);s[4]=1180;s[5]='5(10)';
+  assert.equal(api.parseFile([ledgerHeader,s,b]).trades[0].costKnown,false);
+});
 test('reverse chronology, partial sales and remaining stock do not drop realized P&L', () => {
   const result = api.parseFile([ledgerHeader,execution('2026-01-05','매도',4,150),execution('2026-01-02','매수',10,100)]);
   assert.equal(result.trades[0].realizedPnl,200);

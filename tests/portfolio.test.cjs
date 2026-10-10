@@ -30,15 +30,29 @@ test('Samsung gross ledger never becomes net profit or a partial combined net to
   assert.equal(api.combined([trade('trading212',3,{reportedOnly:true})],'net',rates).estimated,true);
   assert.equal(api.combined([trade('trading212',3)],'reported',rates).comparisonMissing,true);
 });
-test('domestic and overseas views exclude each other and gross/manual records',()=>{
+test('domestic trade details are selectable without mixing overseas or manual records',()=>{
   const ts=[trade('samsung-ledger',100),trade('samsung-summary',80),trade('trading212',3),trade('trading212-cfd',-5),trade(undefined,99),trade('trading212',2,{currency:'USD'})];
-  assert.deepEqual(api.netViews(ts,'domestic'),['samsung-summary:KRW']);
+  assert.deepEqual(api.netViews(ts,'domestic'),['samsung-ledger:KRW','samsung-summary:KRW']);
   assert.deepEqual(api.netViews(ts,'overseas'),['trading212:GBP','trading212-cfd:GBP','trading212:USD']);
   assert.deepEqual(api.netViews(ts,'combined'),[]);
-  assert.equal(api.preferredView(ts,'domestic','samsung-ledger:KRW'),'samsung-summary:KRW');
-  assert.equal(api.preferredView(ts,'domestic','trading212:GBP'),'samsung-summary:KRW');
+  assert.equal(api.preferredView(ts,'domestic','samsung-ledger:KRW'),'samsung-ledger:KRW');
+  assert.equal(api.preferredView(ts,'domestic','trading212:GBP'),'samsung-ledger:KRW');
   assert.equal(api.preferredView(ts,'overseas','trading212-cfd:GBP'),'trading212-cfd:GBP');
-  assert.equal(api.preferredView([trade('samsung-ledger',100)],'domestic'),'samsung-summary:KRW');
+  assert.equal(api.preferredView([trade('samsung-ledger',100)],'domestic'),'samsung-ledger:KRW');
+  assert.equal(api.preferredView(ts,'domestic','samsung-summary:KRW'),'samsung-summary:KRW');
+});
+test('confirmed ledger costs are used, while old or unknown-cost records stay estimates',()=>{
+  assert.equal(api.pnlFor(trade('samsung-ledger',20,{netPnl:0,costKnown:true}),'net'),0);
+  assert.equal(api.pnlFor(trade('samsung-ledger',20,{netPnl:3,costKnown:false}),'net'),20);
+  assert.equal(api.pnlFor(trade('samsung-ledger',20),'net'),20);
+});
+test('holding comparison uses the sold quantity and known buy costs, excluding hypothetical sale costs',()=>{
+  const t={qty:4,invested:400,netInvested:404,costKnown:true,sellPrice:120};
+  const held=api.heldComparison(t,110);
+  assert.equal(held.pnl,36);assert.equal(held.valueGap,-40);
+  assert.ok(Math.abs(held.returnPct-36/404*100)<1e-8);
+  assert.equal(api.heldComparison({...t,costKnown:false},110).pnl,40);
+  assert.equal(api.heldComparison(t,null),null);
 });
 test('currency pair, positive rate and valid rate date are required',()=>{
   assert.equal(api.parseRate({base:'GBP',quote:'KRW',rate:1800,date:'2026-10-09'},'GBP').rate,1800);

@@ -10,18 +10,25 @@
     return String(source).startsWith('samsung-') ? 'domestic' : String(source).startsWith('trading212') ? 'overseas' : 'legacy';
   }
   function netViews(trades, account) {
-    return [...new Set(trades.filter(t => accountFor(t.source) === account && t.source !== 'samsung-ledger').map(t => t.source + ':' + (t.currency || 'KRW')))];
+    return [...new Set(trades.filter(t => accountFor(t.source) === account).map(t => t.source + ':' + (t.currency || 'KRW')))];
   }
   function preferredView(trades, account, requested) {
     const views = netViews(trades, account);
-    return views.includes(requested) ? requested : views[0] || (account === 'overseas' ? 'trading212:GBP' : 'samsung-summary:KRW');
+    return views.includes(requested) ? requested : views.find(v => v.startsWith('samsung-ledger:')) || views[0] || (account === 'overseas' ? 'trading212:GBP' : 'samsung-summary:KRW');
   }
   function pnlFor(trade, basis) {
+    if (trade.source === 'samsung-ledger' && trade.costKnown && finite(trade.netPnl)) return trade.netPnl;
     if (basis === 'reported') {
       if (trade.source === 'trading212-cfd' && finite(trade.resultAfterFx)) return trade.resultAfterFx;
       if (trade.source === 'trading212' && finite(trade.reportedPnl)) return trade.reportedPnl;
     }
     return finite(trade.realizedPnl) ? trade.realizedPnl : (trade.sellPrice - trade.buyPrice) * trade.qty;
+  }
+  function heldComparison(trade, price) {
+    const cost = trade.costKnown && finite(trade.netInvested) ? trade.netInvested : trade.invested;
+    if (!finite(price) || price <= 0 || !finite(cost) || cost <= 0 || !(trade.qty > 0)) return null;
+    const pnl = price * trade.qty - cost;
+    return { pnl, returnPct: pnl / cost * 100, valueGap: (price - trade.sellPrice) * trade.qty };
   }
   function validRate(rate) {
     if (!rate || !finite(rate.rate) || rate.rate <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(rate.date || '')) return false;
@@ -76,5 +83,5 @@
       excludedLedger: hasLedger,
       excludedManual: trades.some(t => !labels[t.source]) };
   }
-  return { accountFor, netViews, preferredView, pnlFor, validRate, parseRate, fetchRates, combined };
+  return { accountFor, netViews, preferredView, pnlFor, heldComparison, validRate, parseRate, fetchRates, combined };
 });
