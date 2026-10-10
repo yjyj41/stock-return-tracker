@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<!-- build 20260704c: current-price + candlestick -->
+<!-- build 20261011: chronological imports, partial sales, Samsung P&L, Trading 212 -->
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>수익노트 · 삼성증권 &amp; Trading 212</title>
 <script src="./support.js"></script>
+<script src="./importers.js"></script>
+<script src="./portfolio.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -27,6 +30,16 @@
   input, textarea, button { font-family: inherit; }
   input::placeholder, textarea::placeholder { color: #B0B8C1; }
   input:focus, textarea:focus { outline: none; border-color: #3182F6 !important; }
+  .trade-head { flex-wrap: wrap; }
+  .trade-head > div { min-width: 0 !important; }
+  .trade-prices { flex: 1 1 210px !important; flex-wrap: wrap; }
+  .trade-name { flex: 1 1 180px !important; overflow-wrap: anywhere; }
+  .trade-head:focus-visible { outline: 2px solid #3182F6; outline-offset: 2px; }
+  @media (max-width: 680px) {
+    .dashboard-grid, .entry-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .trade-head { gap: 10px !important; }
+    .trade-name { flex-basis: 100% !important; }
+  }
   @keyframes scFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </helmet>
@@ -39,16 +52,52 @@
         <div style="width:42px;height:42px;border-radius:13px;background:#191F28;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;letter-spacing:-0.04em;">수</div>
         <div>
           <div style="font-size:19px;font-weight:800;letter-spacing:-0.03em;">수익노트</div>
-          <div style="font-size:12.5px;color:#8B95A1;margin-top:1px;">삼성증권 매매 일지 · 건별 손익 추적</div>
+          <div style="font-size:12.5px;color:#8B95A1;margin-top:1px;">삼성증권 · Trading 212 매매 손익 추적</div>
         </div>
       </div>
       <div style="font-size:13px;color:#8B95A1;font-weight:600;background:#fff;padding:8px 14px;border-radius:10px;">{{ stats.countLabel }}</div>
     </div>
 
+    <section aria-label="한국 영국 합산 손익" style="background:#fff;border-radius:20px;padding:20px;margin-bottom:22px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+        <div style="font-size:14px;font-weight:800;">한국 · 영국 합산 손익</div>
+        <div role="group" aria-label="손익 계산 기준" style="display:flex;gap:6px;">
+          <sc-for list="{{ profitBases }}" as="pb"><button aria-pressed="{{ pb.active }}" onClick="{{ pb.onClick }}" style="border:1px solid #E5E8EB;background: {{ pb.bg }};color: {{ pb.color }};padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">{{ pb.label }}</button></sc-for>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#8B95A1;">{{ combinedTitle }}</div>
+      <div aria-live="polite" style="font-size:32px;font-weight:800;letter-spacing:-0.035em;color: {{ combinedColor }};margin-top:5px;">{{ combinedTotal }}</div>
+      <div style="font-size:12px;color:#6B7684;margin-top:8px;line-height:1.7;">{{ combinedNote }}</div>
+      <div style="margin-top:14px;display:grid;gap:9px;">
+        <sc-for list="{{ combinedRows }}" as="cr">
+          <div style="border-top:1px solid #F2F4F6;padding-top:9px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;">
+            <div><div style="font-size:13px;font-weight:700;">{{ cr.label }}</div><div style="font-size:11px;color:#8B95A1;margin-top:3px;">{{ cr.period }}</div></div>
+            <div style="text-align:right;"><div style="font-size:13px;font-weight:700;">{{ cr.amount }}</div><div style="font-size:12px;color:#6B7684;margin-top:3px;">{{ cr.converted }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+      <details style="margin-top:15px;font-size:12px;color:#6B7684;">
+        <summary style="cursor:pointer;font-weight:700;">환율 확인 · 직접 입력</summary>
+        <div style="margin-top:10px;line-height:1.7;">최신 일별 기준 환율로 전체 손익을 환산합니다. 거래일별 환율이나 실제 환전 수수료를 반영한 손익은 아닙니다. 거래 파일·금액은 환율 API에 전송하지 않습니다. <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a></div>
+        <sc-for list="{{ fxCurrencies }}" as="fc"><div style="margin-top:10px;"><div>{{ fc.description }}</div><label style="display:flex;align-items:center;gap:8px;margin-top:5px;">{{ fc.inputLabel }} <input aria-label="{{ fc.inputLabel }}" type="number" min="0.000001" step="any" value="{{ fc.value }}" onChange="{{ fc.onChange }}" placeholder="환율 입력" style="width:130px;border:1px solid #E5E8EB;border-radius:8px;padding:7px;" /> 원</label></div></sc-for>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"><button disabled="{{ fxBusy }}" onClick="{{ onRefreshFX }}" style="border:1px solid #E5E8EB;background:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;">환율 새로고침</button><button disabled="{{ fxBusy }}" onClick="{{ onApplyFX }}" style="border:0;background:#191F28;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;">입력한 환율 적용</button></div>
+      </details>
+      <div role="status" style="font-size:12px;color:#6B7684;line-height:1.7;margin-top:8px;">{{ fxStatus }}</div>
+    </section>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" aria-label="증권사와 통화 선택">
+      <sc-for list="{{ sourceViews }}" as="sv">
+        <button onClick="{{ sv.onClick }}" style="border:1px solid #E5E8EB;background: {{ sv.bg }};color: {{ sv.color }};padding:9px 13px;border-radius:10px;cursor:pointer;font-weight:700;">{{ sv.label }}</button>
+      </sc-for>
+    </div>
+    <div role="status" style="font-size:12.5px;color:#6B7684;line-height:1.7;background:#fff;border-radius:12px;padding:13px 16px;margin-bottom:18px;">
+      <div>{{ basisSummary }}</div>
+      <details style="margin-top:5px;"><summary style="cursor:pointer;font-weight:600;">계산 기준 · 비용 내역</summary><div style="white-space:pre-line;margin-top:6px;">{{ basisDescription }}</div></details>
+    </div>
     <!-- dashboard -->
-    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:26px;">
+    <div class="dashboard-grid" style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:26px;">
       <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <div style="font-size:13px;color:#8B95A1;font-weight:600;margin-bottom:8px;">누적 실현손익</div>
+        <div style="font-size:13px;color:#8B95A1;font-weight:600;margin-bottom:8px;">{{ pnlTitle }}</div>
         <div style="display:flex;align-items:baseline;gap:10px;">
           <div style="font-size:33px;font-weight:800;letter-spacing:-0.035em;color: {{ stats.pnlColor }};">{{ stats.totalPnlLabel }}</div>
           <div style="font-size:15px;font-weight:700;color: {{ stats.pnlColor }};">{{ stats.cumRetLabel }}</div>
@@ -68,14 +117,14 @@
           <div style="font-size:12px;color:#8B95A1;margin-top:2px;">건당 평균</div>
         </div>
         <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
-          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">총 투자금</div>
+          <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">{{ investedTitle }}</div>
           <div style="font-size:20px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;">{{ stats.investedLabel }}</div>
-          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">누적 매수금액</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">{{ investedCaption }}</div>
         </div>
         <div style="background:#fff;border-radius:20px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:center;">
           <div style="font-size:12.5px;color:#8B95A1;font-weight:600;">평균 보유</div>
           <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-top:4px;">{{ stats.avgHoldLabel }}</div>
-          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">매수 → 매도</div>
+          <div style="font-size:12px;color:#8B95A1;margin-top:2px;">{{ holdingCaption }}</div>
         </div>
       </div>
     </div>
@@ -100,12 +149,12 @@
           <div style="display:flex;flex-direction:column;gap:10px;">
             <sc-for list="{{ visibleTrades }}" as="t" hint-placeholder-count="5">
               <div style="background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;">
-                <div onClick="{{ t.onToggle }}" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;" style-hover="background:#FAFBFC;">
-                  <div style="flex:0 0 auto;min-width:118px;">
+                <div class="trade-head" role="button" tabindex="0" onKeyDown="{{ t.onKeyDown }}" onClick="{{ t.onToggle }}" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;" style-hover="background:#FAFBFC;">
+                  <div class="trade-name" style="flex:0 0 auto;min-width:118px;">
                     <div style="font-size:15px;font-weight:700;letter-spacing:-0.02em;">{{ t.name }}</div>
                     <div style="font-size:12px;color:#8B95A1;margin-top:3px;">{{ t.qtyLabel }} · 보유 {{ t.holdLabel }}</div>
                   </div>
-                  <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:150px;">
+                  <div class="trade-prices" style="flex:0 0 auto;display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:150px;">
                     <span style="color:#8B95A1;">{{ t.buyPriceLabel }}</span>
                     <span style="color:#C4C9CF;font-size:12px;">→</span>
                     <span style="font-weight:600;color:#4E5968;">{{ t.sellPriceLabel }}</span>
@@ -124,8 +173,8 @@
                   <div style="padding:6px 18px 20px;border-top:1px solid #F2F4F6;">
                     <div data-trade="{{ t.id }}" style="width:100%;height:250px;position:relative;"></div>
                     <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap;">
-                      <div><div style="font-size:11px;color:#8B95A1;">매수</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.buyDate }} · {{ t.buyPriceLabel }}원</div></div>
-                      <div><div style="font-size:11px;color:#8B95A1;">매도</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.sellDate }} · {{ t.sellPriceLabel }}원</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">{{ t.entryWord }} · {{ t.basis }}</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.buyDate }} · {{ t.buyPriceLabel }}</div></div>
+                      <div><div style="font-size:11px;color:#8B95A1;">{{ t.exitWord }}</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.sellDate }} · {{ t.sellPriceLabel }}</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">투자금</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.investedLabel }}</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">실현손익</div><div style="font-size:13px;font-weight:700;margin-top:3px;color: {{ t.color }};">{{ t.pnlLabel }}</div></div>
                       <div><div style="font-size:11px;color:#8B95A1;">보유기간</div><div style="font-size:13px;font-weight:600;margin-top:3px;">{{ t.holdLabel }}</div></div>
@@ -146,7 +195,7 @@
         <sc-if value="{{ noTrades }}" hint-placeholder-val="{{ false }}">
           <div style="background:#fff;border-radius:16px;padding:54px 20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-size:15px;font-weight:700;color:#4E5968;">아직 기록된 매매가 없어요</div>
-            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 삼성증권 CSV/XLSX를 올려보세요.</div>
+            <div style="font-size:13px;color:#8B95A1;margin-top:6px;">‘거래 추가’ 탭에서 삼성증권·Trading 212 파일을 올려보세요.</div>
           </div>
         </sc-if>
       </div>
@@ -198,7 +247,7 @@
 
     <!-- ADD VIEW -->
     <sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="entry-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
           <div style="font-size:15px;font-weight:800;margin-bottom:4px;">직접 입력</div>
           <div style="font-size:12.5px;color:#8B95A1;margin-bottom:18px;">매매 한 건을 입력하면 실제 차트가 자동 생성돼요.</div>
@@ -246,8 +295,8 @@
 
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div style="background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <div style="font-size:15px;font-weight:800;margin-bottom:4px;">삼성증권 파일 불러오기</div>
-            <div style="font-size:12.5px;color:#8B95A1;line-height:1.6;margin-bottom:14px;">삼성증권 <b>거래내역(체결)</b> CSV·XLSX를 올리면 종목별로 매수→매도를 자동으로 묶어 손익을 계산해요. (USD·입출금은 제외)</div>
+            <div style="font-size:15px;font-weight:800;margin-bottom:4px;">증권사 파일 불러오기</div>
+            <div style="font-size:12.5px;color:#6B7684;line-height:1.7;margin-bottom:14px;">삼성증권 <b>거래내역 또는 손익표</b>, Trading 212 <b>ISA/Invest·CFD 거래내역 CSV</b>를 자동 인식해요. 매입원가를 계산하려면 최초 매수부터 전체 내역을 올려 주세요. 통화와 파일 종류별로 나누어 표시합니다.<br><b>다시 불러오면 같은 파일 종류의 기존 기록을 교체합니다.</b> 직접 입력한 기록과 다른 종류의 기록은 보존됩니다.</div>
             <label data-csvdrop style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px dashed #C4C9CF;border-radius:14px;padding:26px 16px;cursor:pointer;text-align:center;background:#fff;">
               <div style="font-size:26px;">📄</div>
               <div style="font-size:13.5px;font-weight:700;color:#4E5968;">여기에 파일을 드롭</div>
@@ -280,7 +329,7 @@
             </div>
             <div style="display:flex;gap:8px;">
               <button onClick="{{ onLoadSample }}" style="border:1px solid #E5E8EB;background:#fff;color:#4E5968;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">예시 데이터</button>
-              <button onClick="{{ onClearAll }}" style="border:1px solid #FDE2E4;background:#fff;color:#F04452;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">전체 삭제</button>
+              <button onClick="{{ onClearAll }}" style="border:1px solid #FDE2E4;background:#fff;color:#F04452;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;cursor:pointer;">선택한 기록 삭제</button>
             </div>
           </div>
         </div>
@@ -321,6 +370,10 @@ const CODE_MAP = {
 };
 
 function won(n) { return Math.round(n).toLocaleString('ko-KR'); }
+function money(n, currency) {
+  const c = currency || 'KRW';
+  return Number(n).toLocaleString('ko-KR', { minimumFractionDigits: c === 'KRW' ? 0 : 2, maximumFractionDigits: c === 'KRW' ? 0 : 2 }) + (c === 'KRW' ? '원' : ' ' + c);
+}
 function parseD(s) { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
 function fmtDateShort(s) { const d = parseD(s); return (d.getMonth() + 1) + '.' + d.getDate(); }
 function daysBetween(a, b) { return Math.round((parseD(b) - parseD(a)) / 86400000); }
@@ -340,55 +393,7 @@ function decodeBuf(buf) {
   const bytes = new Uint8Array(buf);
   try { const u = new TextDecoder('utf-8', { fatal: false }).decode(bytes); if (!/�/.test(u)) return u; try { return new TextDecoder('euc-kr').decode(bytes); } catch (e) { return u; } } catch (e) { return new TextDecoder().decode(bytes); }
 }
-function parseCsvRows(text) {
-  const rows = []; let row = [], cur = '', q = false;
-  for (let i = 0; i < text.length; i++) { const ch = text[i];
-    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
-    else { if (ch === '"') q = true; else if (ch === ',') { row.push(cur); cur = ''; } else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else if (ch === '\r') {} else cur += ch; }
-  }
-  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
-  return rows;
-}
-function buildRounds(execs) {
-  const rounds = []; let pos = 0, bq = 0, bc = 0, sq = 0, sc = 0, bd = null, sd = null;
-  for (const e of execs) {
-    if (e.side === 'B') { if (pos === 0) { bq = bc = sq = sc = 0; bd = e.date; sd = null; } bq += e.qty; bc += e.qty * e.price; pos += e.qty; if (!bd) bd = e.date; }
-    else { sq += e.qty; sc += e.qty * e.price; sd = e.date; pos -= e.qty; }
-    if (pos === 0 && (sq > 0 || bq > 0)) {
-      if (bq > 0 && sq > 0) rounds.push({ buyDate: bd, sellDate: sd, qty: Math.round(Math.min(bq, sq)), buyPrice: bc / bq, sellPrice: sc / sq, pnl: sc - bc * (sq / bq) });
-      bq = bc = sq = sc = 0; bd = sd = null;
-    }
-  }
-  return rounds;
-}
-function parseLedger(rows) {
-  let h = -1;
-  for (let i = 0; i < Math.min(rows.length, 8); i++) { if (rows[i] && rows[i].some(c => String(c).includes('거래일자'))) { h = i; break; } }
-  const hdr = h >= 0 ? rows[h] : ['거래일자','거래명','거래내용','통화코드','금액(수량)','','현금잔액','잔고수량','평가금액','거래단가','처리점'];
-  const find = (...keys) => { for (let i = 0; i < hdr.length; i++) { const s = String(hdr[i] || ''); if (keys.some(k => s.includes(k))) return i; } return -1; };
-  const cDate = find('거래일자','일자'), cType = find('거래명','구분','적요'), cName = find('거래내용','종목'), cCur = find('통화'), cAmt = find('금액'), cPrice = find('거래단가','단가');
-  const amt = cAmt >= 0 ? cAmt : 4, dec = amt + 1, price = cPrice >= 0 ? cPrice : 9;
-  const start = h >= 0 ? h + 1 : 0;
-  const byName = new Map();
-  for (let i = start; i < rows.length; i++) {
-    const r = rows[i]; if (!r) continue;
-    const type = String(r[cType >= 0 ? cType : 1] || ''); const name = r[cName >= 0 ? cName : 2]; const cur = r[cCur >= 0 ? cCur : 3];
-    if (!name) continue;
-    if (cur === 'USD' || type.includes('외화') || type.includes('미국')) continue;
-    const isbuy = type.includes('매수'), issell = type.includes('매도');
-    if (!isbuy && !issell) continue;
-    const p = num(r[price]); if (!p) continue;
-    const q = Math.abs(num(isbuy ? r[amt] : r[dec]) || 0); if (!q) continue;
-    let d = r[cDate >= 0 ? cDate : 0];
-    if (d instanceof Date) d = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
-    else d = normDate(String(d).slice(0, 10));
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name).push({ date: d, side: isbuy ? 'B' : 'S', qty: q, price: p });
-  }
-  const trades = [];
-  for (const [name, ex] of byName) { for (const r of buildRounds(ex)) { if (r.qty > 0) trades.push({ name, ...r }); } }
-  return trades;
-}
+function parseCsvRows(text) { return StockImports.csv(text); }
 
 const SAMPLE = [
   { id: 's1', name: '삼성전자', qty: 100, buyDate: '2026-04-03', buyPrice: 71200, sellDate: '2026-04-21', sellPrice: 78500, memo: '1분기 실적 기대' },
@@ -399,11 +404,14 @@ const SAMPLE = [
 
 class Component extends DCLogic {
   state = {
-    trades: SAMPLE.map(t => ({ ...t })),
+    trades: [],
+    selectedView: 'manual:KRW',
+    importNotes: {},
+    profitBasis: 'net', fxRates: {}, fxDrafts: {}, fxBusy: false, fxError: '',
     tab: 'list',
     expandedId: null,
     filter: '__all',
-    calMonth: '2026-06',
+    calMonth: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }).slice(0, 7),
     form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' },
     pasteText: '',
     formError: '',
@@ -414,13 +422,24 @@ class Component extends DCLogic {
   };
 
   componentDidMount() {
+    this._fxRequested = new Set();
+    try {
+      const storedRates = JSON.parse(localStorage.getItem(KEY + '_fx') || '{}');
+      const fxRates = Object.fromEntries(Object.entries(storedRates || {}).filter(([c, rate]) => /^[A-Z]{3}$/.test(c) && StockPortfolio.validRate(rate)));
+      this.setState({ fxRates, profitBasis: localStorage.getItem(KEY + '_basis') === 'reported' ? 'reported' : 'net' });
+    } catch (e) {}
     this.priceCache = {};
     this.lastPrice = {};
     this.goodProxy = -1;
     try { const today = todayYmd(); Object.keys(localStorage).forEach(k => { if (k.indexOf('pc') === 0 && !k.endsWith(today)) localStorage.removeItem(k); }); } catch (e) {}
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) this.setState({ trades: t }); }
+      if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) {
+        const storedView = localStorage.getItem(KEY + '_view');
+        const selectedView = t.some(x => StockImports.viewKey(x) === storedView) ? storedView : (t.length ? StockImports.viewKey(t[0]) : 'manual:KRW');
+        let importNotes = {}; try { importNotes = JSON.parse(localStorage.getItem(KEY + '_notes') || '{}'); } catch (e) {}
+        this.setState({ trades: t, selectedView, importNotes });
+      } }
     } catch (e) {}
     this._onResize = () => this.scheduleDraw();
     window.addEventListener('resize', this._onResize);
@@ -430,7 +449,45 @@ class Component extends DCLogic {
 
   componentWillUnmount() { if (this._onResize) window.removeEventListener('resize', this._onResize); }
 
-  componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); }
+  componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); this.ensureFX(); }
+
+  setProfitBasis(profitBasis) {
+    this.setState({ profitBasis });
+    try { localStorage.setItem(KEY + '_basis', profitBasis); } catch (e) {}
+  }
+  foreignCurrencies() {
+    return [...new Set(StockPortfolio.combined(this.state.trades, this.state.profitBasis, {}).rows.map(r => r.currency).filter(c => c !== 'KRW'))];
+  }
+  ensureFX() {
+    if (!this._fxRequested || this.state.fxBusy) return;
+    const missing = this.foreignCurrencies().filter(c => !this._fxRequested.has(c) && (!this.state.fxRates[c] || this.state.fxRates[c].source !== '수동입력'));
+    if (missing.length) this.refreshFX(missing);
+  }
+  async refreshFX(onlyCurrencies) {
+    if (this.state.fxBusy) return;
+    const currencies = onlyCurrencies || this.foreignCurrencies();
+    if (!currencies.length) { this.setState({ fxError: '외화 거래 파일을 먼저 불러오세요.' }); return; }
+    currencies.forEach(c => this._fxRequested.add(c));
+    this.setState({ fxBusy: true, fxError: '' });
+    const result = await StockPortfolio.fetchRates(currencies, (url, options) => fetch(url, options));
+    const fxRates = { ...this.state.fxRates, ...result.rates };
+    this.setState({ fxRates, fxBusy: false, fxDrafts: {}, fxError: result.errors.length ? result.errors.join(', ') + ' 환율을 불러오지 못했습니다. 저장된 기준일을 확인하거나 환율을 직접 입력하세요.' : '' });
+    try { localStorage.setItem(KEY + '_fx', JSON.stringify(fxRates)); } catch (e) {}
+  }
+  applyFX() {
+    if (this.state.fxBusy) return;
+    const fxRates = { ...this.state.fxRates }; let changed = false;
+    for (const currency of this.foreignCurrencies()) {
+      const draft = this.state.fxDrafts[currency];
+      if (draft == null || String(draft).trim() === '') continue;
+      const rate = Number(draft);
+      if (!Number.isFinite(rate) || rate <= 0) { this.setState({ fxError: currency + ' 환율은 양수로 입력해 주세요.' }); return; }
+      fxRates[currency] = { rate, date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }), source: '수동입력', fetchedAt: new Date().toISOString() }; changed = true;
+    }
+    if (!changed) { this.setState({ fxError: '적용할 환율을 먼저 입력해 주세요.' }); return; }
+    this.setState({ fxRates, fxDrafts: {}, fxError: '' });
+    try { localStorage.setItem(KEY + '_fx', JSON.stringify(fxRates)); } catch (e) {}
+  }
 
   scheduleDraw() { clearTimeout(this._drawT); this._drawT = setTimeout(() => this.drawAll(), 50); }
 
@@ -443,7 +500,11 @@ class Component extends DCLogic {
     });
   }
 
-  getEnriched() { return this.state.trades.map(t => this.enrich(t)); }
+  getEnriched() { return this.state.trades.filter(t => StockImports.viewKey(t) === this.state.selectedView).map(t => this.enrich(t)); }
+  selectView(selectedView) {
+    this.setState({ selectedView, filter: '__all', expandedId: null });
+    try { localStorage.setItem(KEY + '_view', selectedView); } catch (e) {}
+  }
 
   drawAll() {
     try {
@@ -463,7 +524,7 @@ class Component extends DCLogic {
     if (!this.lastPrice) this.lastPrice = {};
     const fromY = ymdOf(new Date().toISOString().slice(0, 10), -12), toY = todayYmd();
     const codes = [];
-    this.state.trades.forEach(t => { const c = t.code || CODE_MAP[String(t.name).replace(/\s/g, '')]; if (c && this.lastPrice[c] === undefined && codes.indexOf(c) < 0) codes.push(c); });
+    this.state.trades.forEach(t => { if (String(t.source || '').startsWith('trading212') || t.kind === 'summary') return; const c = t.code || CODE_MAP[String(t.name).replace(/\s/g, '')]; if (c && this.lastPrice[c] === undefined && codes.indexOf(c) < 0) codes.push(c); });
     codes.forEach(code => {
       this.lastPrice[code] = 'loading';
       this.fetchSise(code, fromY, toY)
@@ -473,19 +534,20 @@ class Component extends DCLogic {
   }
   queuePriceRender() { clearTimeout(this._prt); this._prt = setTimeout(() => this.setState({ _tick: (this.state._tick || 0) + 1 }), 150); }
 
-  save(trades) { try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {} }
+  save(trades) { try { localStorage.setItem(KEY, JSON.stringify(trades)); localStorage.setItem(KEY + '_view', this.state.selectedView); } catch (e) {} }
   setTrades(trades, extra) { this.setState({ trades, ...(extra || {}) }, () => this.save(trades)); }
   patchTrade(id, patch) { const trades = this.state.trades.map(t => t.id === id ? { ...t, ...patch } : t); this.setTrades(trades); }
 
   enrich(t) {
-    const invested = t.buyPrice * t.qty;
-    const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+    const invested = Number.isFinite(t.invested) ? t.invested : t.buyPrice * t.qty;
+    const pnl = StockPortfolio.pnlFor(t, this.state.profitBasis);
+    const currency = t.currency || 'KRW';
     const ret = invested ? pnl / invested : 0;
     const hold = daysBetween(t.buyDate, t.sellDate);
     const isWin = pnl >= 0;
     const color = isWin ? RED : BLUE;
     const nk = String(t.name).replace(/\s/g, '');
-    const codeR = t.code || CODE_MAP[nk] || '';
+    const codeR = String(t.source || '').startsWith('trading212') || t.kind === 'summary' ? '' : t.code || CODE_MAP[nk] || '';
     const lp = this.lastPrice ? this.lastPrice[codeR] : undefined;
     let curLabel = '⋯', curColor = '#B0B8C1', curPct = '';
     if (typeof lp === 'number') {
@@ -494,22 +556,26 @@ class Component extends DCLogic {
       curColor = g >= 0 ? RED : BLUE;
       curPct = '(' + (g >= 0 ? '+' : '') + g.toFixed(1) + '%)';
     } else if (lp === 'error') { curLabel = '–'; }
+    if (String(t.source || '').startsWith('trading212') || t.kind === 'summary') curLabel = '–';
     return {
       ...t, invested, pnl, ret, hold, isWin, color,
       code: codeR,
       curLabel, curColor, curPct,
-      qtyLabel: t.qty + '주',
-      buyPriceLabel: won(t.buyPrice),
-      sellPriceLabel: won(t.sellPrice),
-      investedLabel: won(invested) + '원',
-      retLabel: (ret >= 0 ? '+' : '') + (ret * 100).toFixed(1) + '%',
-      pnlLabel: (pnl >= 0 ? '+' : '') + won(pnl) + '원',
-      holdLabel: hold === 0 ? '당일' : hold + '일',
+      basis: this.state.profitBasis === 'reported' && t.source === 'trading212-cfd' ? 'CFD Result after FX fee · 이자·배당 조정 제외' : this.state.profitBasis === 'reported' && t.source === 'trading212' ? 'ISA/Invest CSV Result · 비용 포함 Total과 다름' : t.basis || '직접 입력 · 비용 차감 전',
+      qtyLabel: t.kind === 'summary' ? '일별 합계' : Number(t.qty.toFixed(10)) + (t.kind === 'cfd' ? '단위 · ' + t.direction : '주'),
+      buyPriceLabel: t.kind === 'cfd' ? (t.buyPrice == null ? '진입 가격 미확인' : money(t.buyPrice, t.priceCurrency)) : t.unknownCost ? '매입원가 미확인' : money(t.buyPrice, currency),
+      sellPriceLabel: t.kind === 'cfd' ? (t.sellPrice == null ? '청산 가격 미확인' : money(t.sellPrice, t.priceCurrency)) : t.proceeds == null && t.kind === 'reported' ? 'CSV Result 기준' : money(t.sellPrice, currency),
+      investedLabel: t.unknownCost ? '미확인' : money(invested, currency),
+      retLabel: t.kind === 'cfd' ? '증거금 수익률 미계산' : t.unknownCost ? '수익률 미확인' : (ret >= 0 ? '+' : '') + (ret * 100).toFixed(1) + '%',
+      pnlLabel: (pnl >= 0 ? '+' : '') + money(pnl, currency),
+      holdLabel: t.kind === 'summary' || (t.kind === 'cfd' ? t.unknownHold : t.unknownCost) ? '–' : hold === 0 ? '당일' : hold + '일',
+      entryWord: t.kind === 'cfd' ? '진입' : '매수', exitWord: t.kind === 'cfd' ? '청산' : '매도',
       sellDateLabel: fmtDateShort(t.sellDate),
       memoLabel: t.memo || '',
       afterInfo: (this.priceCache && this.priceCache['after_' + t.id]) || '',
       expanded: this.state.expandedId === t.id,
       onToggle: () => this.setState({ expandedId: this.state.expandedId === t.id ? null : t.id }),
+      onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.setState({ expandedId: this.state.expandedId === t.id ? null : t.id }); } },
       onDelete: () => this.deleteTrade(t.id)
     };
   }
@@ -521,7 +587,8 @@ class Component extends DCLogic {
     const f = this.state.form;
     if (!f.name || !f.qty || !f.buyPrice || !f.sellPrice || !f.buyDate || !f.sellDate) { this.setState({ formError: '종목·수량·날짜·가격을 모두 입력해주세요.' }); return; }
     const t = { id: uid(), name: f.name.trim(), qty: parseFloat(String(f.qty).replace(/[^0-9.]/g, '')), buyDate: f.buyDate, buyPrice: parseFloat(String(f.buyPrice).replace(/[^0-9.]/g, '')), sellDate: f.sellDate, sellPrice: parseFloat(String(f.sellPrice).replace(/[^0-9.]/g, '')), memo: f.memo.trim() };
-    this.setTrades([...this.state.trades, t], { form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' }, formError: '', tab: 'list', expandedId: t.id });
+    if (![t.qty, t.buyPrice, t.sellPrice].every(x => Number.isFinite(x) && x > 0) || t.sellDate < t.buyDate) { this.setState({ formError: '양수인 수량·가격과 매수 이후 매도일을 입력해 주세요.' }); return; }
+    this.setTrades([...this.state.trades, t], { selectedView: 'manual:KRW', filter: '__all', form: { name: '', qty: '', buyDate: '', buyPrice: '', sellDate: '', sellPrice: '', memo: '' }, formError: '', tab: 'list', expandedId: t.id });
   }
 
   importPaste() {
@@ -537,7 +604,7 @@ class Component extends DCLogic {
       out.push({ id: uid(), name, qty, buyDate: bd, buyPrice: bp, sellDate: sd, sellPrice: sp, memo });
     });
     if (!out.length) { this.setState({ importMsg: '인식된 매매가 없어요. 형식을 확인해주세요.', importOk: false }); return; }
-    this.setTrades([...this.state.trades, ...out], { pasteText: '', importMsg: out.length + '건을 불러왔어요.', importOk: true, tab: 'list' });
+    this.setTrades([...this.state.trades, ...out], { selectedView: 'manual:KRW', filter: '__all', pasteText: '', importMsg: out.length + '건을 불러왔어요.', importOk: true, tab: 'list' });
   }
 
   handleFile(file) {
@@ -556,18 +623,20 @@ class Component extends DCLogic {
         } else {
           rows = parseCsvRows(decodeBuf(rd.result));
         }
-        const parsed = parseLedger(rows).map(t => ({ id: uid(), name: t.name, qty: t.qty, buyDate: t.buyDate, buyPrice: Math.round(t.buyPrice), sellDate: t.sellDate, sellPrice: Math.round(t.sellPrice), memo: '' }));
-        if (!parsed.length) { this.setState({ csvMsg: '인식된 매매가 없어요. 삼성증권 거래내역(체결) 파일인지 확인해주세요.', csvOk: false }); return; }
-        // 중복 자동 제외 (종목·매수일·매도일·수량·가격이 모두 같으면 이미 있는 것으로 간주)
-        const sig = t => [t.name, t.buyDate, t.sellDate, t.qty, Math.round(t.buyPrice), Math.round(t.sellPrice)].join('|');
-        const seen = new Set(this.state.trades.map(sig));
-        const fresh = [];
-        for (const t of parsed) { const s = sig(t); if (seen.has(s)) continue; seen.add(s); fresh.push(t); }
-        const dup = parsed.length - fresh.length;
-        if (!fresh.length) { this.setState({ csvMsg: '모두 이미 등록된 매매예요 (중복 ' + dup + '건 제외, 새로 추가 0건).', csvOk: true }); return; }
-        this.setTrades([...this.state.trades, ...fresh], { csvMsg: fresh.length + '건 추가' + (dup ? (' · 중복 ' + dup + '건 자동 제외') : '') + ' (USD·입출금 제외)', csvOk: true, tab: 'list' });
+        const result = StockImports.parseFile(rows);
+        const trades = StockImports.replaceImport(this.state.trades, result);
+        const selectedView = StockImports.viewKey(result.trades[0]);
+        const importNotes = { ...this.state.importNotes, [result.source]: result.warnings.join('\n') };
+        try {
+          localStorage.setItem(KEY + '_notes', JSON.stringify(importNotes));
+          localStorage.setItem(KEY + '_view', selectedView);
+        } catch (e) {}
+        this.setTrades(trades, { selectedView, importNotes, filter: '__all', expandedId: null,
+          csvMsg: result.label + ' ' + result.trades.length + '건을 불러왔어요. 같은 종류의 이전 기록은 교체했어요.',
+          csvOk: true, tab: 'list', calMonth: result.trades[result.trades.length - 1].sellDate.slice(0, 7) });
       } catch (err) { this.setState({ csvMsg: '파일을 읽지 못했어요: ' + (err && err.message || err), csvOk: false }); }
     };
+    rd.onerror = () => this.setState({ csvMsg: '파일 읽기에 실패했어요. 파일을 다시 선택해 주세요.', csvOk: false });
     rd.readAsArrayBuffer(file);
   }
 
@@ -626,6 +695,7 @@ class Component extends DCLogic {
   setTvInfo(info, msg) { if (info) info.textContent = msg; }
 
   drawTradeChart(el, info, t) {
+    if (t.kind === 'summary' || String(t.source || '').startsWith('trading212')) { el.innerHTML = ''; el.style.height = '0px'; this.setTvInfo(info, t.kind === 'summary' ? '일별 손익 합계입니다. 종목별 차트는 거래내역에서 확인하세요.' : 'Trading 212 손익은 CSV 금액 기준입니다. 해외 실시간 시세 차트는 제공하지 않습니다.'); return; }
     if (typeof LightweightCharts === 'undefined') { this.setTvInfo(info, '차트 모듈 로딩 실패 — 인터넷 확인 후 새로고침하세요'); return; }
     const code = t.code;
     if (!code) {
@@ -739,12 +809,12 @@ class Component extends DCLogic {
       const dow = (startDow + day - 1) % 7; const dayColor = dow === 0 ? '#F04452' : (dow === 6 ? '#3182F6' : '#6B7684'); const info = byDay[day];
       if (info) {
         const isWin = info.pnl >= 0; const baseC = isWin ? RED : BLUE; const alpha = 0.1 + 0.62 * Math.min(1, Math.abs(info.pnl) / maxAbs); const strong = alpha > 0.42;
-        cells.push({ day: String(day), bg: (isWin ? 'rgba(240,68,82,' : 'rgba(49,130,246,') + alpha.toFixed(2) + ')', border: 'transparent', dayColor: strong ? '#fff' : dayColor, hasTrades: true, pnlLabel: (info.pnl >= 0 ? '+' : '') + won(info.pnl), pnlColor: strong ? '#fff' : baseC, subColor: strong ? 'rgba(255,255,255,0.85)' : '#8B95A1', countLabel: info.count + '건' });
+        cells.push({ day: String(day), bg: (isWin ? 'rgba(240,68,82,' : 'rgba(49,130,246,') + alpha.toFixed(2) + ')', border: 'transparent', dayColor: strong ? '#fff' : dayColor, hasTrades: true, pnlLabel: (info.pnl >= 0 ? '+' : '') + money(info.pnl, this.state.selectedView.split(':')[1]), pnlColor: strong ? '#fff' : baseC, subColor: strong ? 'rgba(255,255,255,0.85)' : '#8B95A1', countLabel: info.count + '건' });
       } else { cells.push({ day: String(day), bg: '#FAFBFC', border: '#F2F4F6', dayColor, hasTrades: false }); }
     }
     while (cells.length % 7) cells.push({ day: '', bg: 'transparent', border: 'transparent', dayColor: 'transparent', hasTrades: false });
     let monthPnl = 0, monthCount = 0; Object.values(byDay).forEach(v => { monthPnl += v.pnl; monthCount += v.count; });
-    return { cells, title: y + '년 ' + m + '월', sumLabel: (monthPnl >= 0 ? '+' : '') + won(monthPnl) + '원', sumColor: monthPnl >= 0 ? RED : BLUE, countLabel: monthCount ? '· ' + monthCount + '건' : '· 0건' };
+    return { cells, title: y + '년 ' + m + '월', sumLabel: (monthPnl >= 0 ? '+' : '') + money(monthPnl, this.state.selectedView.split(':')[1]), sumColor: monthPnl >= 0 ? RED : BLUE, countLabel: monthCount ? '· ' + monthCount + '건' : '· 0건' };
   }
 
   shiftMonth(delta) { let [y, m] = this.state.calMonth.split('-').map(Number); m += delta; if (m < 1) { m = 12; y -= 1; } if (m > 12) { m = 1; y += 1; } this.setState({ calMonth: y + '-' + String(m).padStart(2, '0') }); }
@@ -752,10 +822,19 @@ class Component extends DCLogic {
   renderVals() {
     this.scheduleDraw();
     const st = this.state;
+    const portfolio = StockPortfolio.combined(st.trades, st.profitBasis, st.fxRates);
+    const signedMoney = (n, currency) => (n >= 0 ? '+' : '') + money(n, currency);
+    const combinedNote = ['불러온 파일 전체 기간의 실현손익을 합산합니다.', '계좌별 기간은 아래에 표시합니다.'];
+    if (portfolio.excludedLedger) combinedNote.push('삼성 손익표를 우선 사용해 거래내역과 중복 합산하지 않습니다.');
+    if (portfolio.excludedManual) combinedNote.push('기존·직접 입력 기록은 합산에서 제외합니다.');
+    if (portfolio.estimated) combinedNote.push('비용 차감 전 추정치 또는 비용 범위 미확인 거래가 포함되어 있습니다.');
+    if (portfolio.comparisonMissing) combinedNote.push('일부 보고값이 없어 해당 거래는 비용 포함 값으로 표시합니다.');
+    if (st.profitBasis === 'reported') combinedNote.push('ISA CSV Result · CFD Result after FX fee 기준입니다. CFD 이자·배당 조정 등은 제외되므로 순손익과 다릅니다. 현재 앱의 조회기간·미실현손익 포함 범위와도 다를 수 있습니다.');
     const enriched = this.getEnriched();
     const count = enriched.length;
     const totalInvested = enriched.reduce((a, t) => a + t.invested, 0);
     const totalPnl = enriched.reduce((a, t) => a + t.pnl, 0);
+    const hasUnknownCost = enriched.some(t => t.unknownCost);
     const cumRet = totalInvested ? totalPnl / totalInvested : 0;
     const wins = enriched.filter(t => t.isWin).length; const losses = count - wins;
     const winRate = count ? Math.round((wins / count) * 100) : 0;
@@ -763,12 +842,12 @@ class Component extends DCLogic {
     const avgHold = count ? Math.round(enriched.reduce((a, t) => a + t.hold, 0) / count) : 0;
     const stats = {
       countLabel: '총 ' + count + '건',
-      totalPnlLabel: (totalPnl >= 0 ? '+' : '') + won(totalPnl) + '원',
+      totalPnlLabel: (totalPnl >= 0 ? '+' : '') + money(totalPnl, st.selectedView.split(':')[1]),
       pnlColor: totalPnl >= 0 ? RED : BLUE,
-      cumRetLabel: '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
+      cumRetLabel: st.selectedView.startsWith('trading212-cfd:') ? '(증거금 수익률 미계산)' : hasUnknownCost ? '(매입원가 미확인)' : '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
       winRateLabel: winRate + '%', winLossLabel: wins + '승 ' + losses + '패',
-      avgRetLabel: (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%', avgRetColor: avgRet >= 0 ? RED : BLUE,
-      investedLabel: won(totalInvested) + '원', avgHoldLabel: avgHold === 0 ? '당일' : avgHold + '일'
+      avgRetLabel: st.selectedView.startsWith('trading212-cfd:') ? '미계산' : hasUnknownCost ? '미확인' : (avgRet >= 0 ? '+' : '') + (avgRet * 100).toFixed(1) + '%', avgRetColor: avgRet >= 0 ? RED : BLUE,
+      investedLabel: st.selectedView.startsWith('trading212-cfd:') ? '자료 없음' : hasUnknownCost && !totalInvested ? '미확인' : money(totalInvested, st.selectedView.split(':')[1]), avgHoldLabel: (st.selectedView.startsWith('trading212-cfd:') ? enriched.some(t => t.unknownHold) : hasUnknownCost) || st.selectedView.startsWith('samsung-summary:') ? '–' : avgHold === 0 ? '당일' : avgHold + '일'
     };
     const names = []; enriched.forEach(t => { if (names.indexOf(t.name) < 0) names.push(t.name); });
     const chipDef = [{ key: '__all', label: '전체' }].concat(names.map(n => ({ key: n, label: n })));
@@ -787,6 +866,26 @@ class Component extends DCLogic {
       csv: e => { const f = e.target.files && e.target.files[0]; if (f) this.handleFile(f); e.target.value = ''; }
     };
     return {
+      profitBases: [{key:'net',label:'비용 포함'},{key:'reported',label:'앱 표시 비교'}].map(b => ({ ...b, active:st.profitBasis === b.key, bg:st.profitBasis === b.key ? '#191F28' : '#fff', color:st.profitBasis === b.key ? '#fff' : '#6B7684', onClick:() => this.setProfitBasis(b.key) })),
+      combinedTitle: st.profitBasis === 'reported' ? 'CSV 보고손익 기준 · 적용 환율로 원화 환산' : portfolio.estimated ? '합산 손익 추정 · 적용 환율로 원화 환산' : '비용 포함 실현손익 · 적용 환율로 원화 환산',
+      combinedTotal: !portfolio.rows.length ? '파일을 불러오세요' : portfolio.total == null ? '환율 확인 필요' : signedMoney(portfolio.total, 'KRW'),
+      combinedColor: portfolio.total != null && portfolio.total < 0 ? BLUE : RED,
+      combinedNote: combinedNote.join(' '),
+      combinedRows: portfolio.rows.map(r => ({ label:r.label, period:r.from + ' ~ ' + r.to + ' · ' + r.count + '건', amount:signedMoney(r.pnl,r.currency), converted:r.currency === 'KRW' ? '원화 기준' : r.krw == null ? '환율 미확인' : signedMoney(r.krw,'KRW') + ' · 1 ' + r.currency + ' = ' + r.rate.toLocaleString('ko-KR',{maximumFractionDigits:4}) + '원 (' + r.rateDate + ' · ' + r.rateSource + ')' })),
+      fxCurrencies: this.foreignCurrencies().map(currency => { const rate = st.fxRates[currency]; return { inputLabel:'1 ' + currency + ' =', description:rate ? '현재 적용: ' + rate.rate.toLocaleString('ko-KR',{maximumFractionDigits:4}) + '원 · ' + rate.date + ' · ' + rate.source : currency + ' 환율 미확인', value:st.fxDrafts[currency] || '', onChange:e => this.setState({ fxDrafts:{ ...this.state.fxDrafts, [currency]:e.target.value } }) }; }),
+      fxBusy:st.fxBusy, fxStatus:st.fxBusy ? '최신 기준 환율을 불러오는 중입니다…' : st.fxError || (portfolio.missing.length ? portfolio.missing.join(', ') + ' 환율이 없어 전체 합산액을 표시하지 않습니다.' : ''),
+      onRefreshFX:() => this.refreshFX(), onApplyFX:() => this.applyFX(),
+      investedTitle: st.selectedView.startsWith('trading212-cfd:') ? '증거금' : '매도분 매입원가',
+      investedCaption: st.selectedView.startsWith('trading212-cfd:') ? '명목 거래금액을 투자금으로 계산하지 않음' : '확인된 매입원가 합계',
+      holdingCaption: st.selectedView.startsWith('trading212-cfd:') ? '진입 → 청산' : '매수 → 매도',
+      basisSummary: st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? 'CSV 보고값 비교: ISA Result / CFD Result after FX fee 기준입니다. 비용 포함 순손익과 다를 수 있습니다.' : st.selectedView.startsWith('samsung-summary:') ? '파일의 순손익을 그대로 집계합니다. 삼성 거래내역의 종목별 추정손익과 별도로 표시합니다.' : st.selectedView.startsWith('samsung-ledger:') ? '수수료·세금·신용이자 차감 전 추정손익입니다. 정확한 순손익은 삼성증권 손익표로 확인하세요.' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산 Total result 기준입니다. 포함된 FX 수수료·이자·배당 조정을 중복 합산하지 않습니다.' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? '일부 거래는 원가·비용 포함 손익을 확인할 수 없어 CSV Result로 표시했습니다. 계산 기준을 확인하세요.' : '매수·매도 Total에 반영된 비용을 포함합니다. ISA/Invest와 CFD, 통화별 손익을 따로 표시합니다.') : '이전 버전에서 불러온 기록은 원본 파일을 다시 올려 수정된 계산을 적용하세요.',
+      sourceViews: [...new Set(st.trades.map(t => StockImports.viewKey(t)))].map(key => {
+        const [source, currency] = key.split(':');
+        const label = ({ 'samsung-ledger': '삼성 거래내역 · 비용 전', 'samsung-summary': '삼성 손익표 · 순손익', trading212: 'Trading 212 ISA/Invest', 'trading212-cfd': 'Trading 212 CFD', manual: '기존·직접입력' })[source] || source;
+        return { label: label + ' · ' + currency, bg: key === st.selectedView ? '#191F28' : '#fff', color: key === st.selectedView ? '#fff' : '#4E5968', onClick: () => this.selectView(key) };
+      }),
+      pnlTitle: st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? (st.selectedView.startsWith('trading212-cfd:') ? 'CFD 보고손익 · FX 수수료 차감 후 · 이자 제외' : 'ISA/Invest 보고손익 · CSV Result 기준') : st.selectedView.startsWith('samsung-summary:') ? '증권사 순손익 · 수수료·세금 차감 후' : st.selectedView.startsWith('samsung-ledger:') ? '실현 매매손익 추정 · 비용 차감 전' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산손익 · Total result 기준' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? 'ISA/Invest 실현손익 · 비용 기준 확인' : 'ISA/Invest 실현손익 · 비용 포함 Total 기준') : '실현 매매손익 · 비용 차감 전',
+      basisDescription: (st.importNotes[st.selectedView.split(':')[0]] || (enriched.length ? '기존·직접 입력한 기록은 거래 가격 차이로 계산합니다. 이전에 불러온 파일의 계산 오류를 수정하려면 원본 파일을 다시 불러와 주세요.' : '거래 추가에서 파일을 불러오세요. 삼성증권 손익표는 정확한 순손익, 거래내역은 종목별 비용 차감 전 추정손익을 표시합니다. Trading 212는 통화별로 집계합니다.')),
       stats, hasData: enriched.length > 0, tabList,
       isList: st.tab === 'list', isCal: st.tab === 'cal', isAdd: st.tab === 'add',
       chips, visibleTrades, hasTrades: count > 0 && visibleTrades.length > 0, noTrades: visibleTrades.length === 0,
@@ -796,8 +895,8 @@ class Component extends DCLogic {
       onFillSample: () => this.setState({ pasteText: '삼성전자\t100\t71200\t2026-05-02\t78500\t2026-05-14\t실적 기대\nNAVER\t20\t215000\t2026-06-01\t238000\t2026-06-12\tAI', importMsg: '' }),
       importMsg: st.importMsg, importMsgColor: st.importOk ? '#3182F6' : '#F04452',
       csvMsg: st.csvMsg, csvMsgColor: st.csvOk ? '#3182F6' : '#F04452',
-      onLoadSample: () => this.setTrades(SAMPLE.map(t => ({ ...t })), { tab: 'list' }),
-      onClearAll: () => this.setTrades([], { expandedId: null })
+      onLoadSample: () => this.setTrades(this.state.trades.filter(t => t.source).concat(SAMPLE.map(t => ({ ...t }))), { selectedView: 'manual:KRW', filter: '__all', tab: 'list' }),
+      onClearAll: () => this.setTrades(this.state.trades.filter(t => StockImports.viewKey(t) !== this.state.selectedView), { expandedId: null, filter: '__all' })
     };
   }
 }
