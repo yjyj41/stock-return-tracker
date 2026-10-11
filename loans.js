@@ -27,17 +27,16 @@
     const name = String(raw.name || '').trim();
     if (!name || name.length > 100) throw new Error('대출 이름을 100자 이내로 입력해 주세요.');
     if (!['credit','overdraft'].includes(raw.type)) throw new Error('대출 종류를 선택해 주세요.');
-    if (!['bullet','principal','amortized'].includes(raw.mode)) throw new Error('상환 방식을 선택해 주세요.');
+    if (!['unknown','bullet','principal','amortized'].includes(raw.mode)) throw new Error('상환 방식을 선택해 주세요.');
     const loan = { id:String(raw.id || ''), name, bank:String(raw.bank || '').trim().slice(0,100), type:raw.type,
       mode:raw.type === 'overdraft' ? 'bullet' : raw.mode, startDate:date(raw.startDate), initialBalance:numeric(raw.initialBalance,'기준일 대출 잔액',true),
       annualRate:annual(raw.annualRate), limit:raw.type === 'overdraft' ? numeric(raw.limit,'마이너스통장 한도',true) : 0,
-      paymentDay:numeric(raw.paymentDay,'매월 이자 납부일',true), maturity:raw.maturity ? date(raw.maturity) : '', dayBasis:raw.dayBasis === '365' ? '365' : 'actual', events:[] };
+      paymentDay:raw.paymentDay == null || String(raw.paymentDay).trim() === '' ? null : numeric(raw.paymentDay,'매월 이자 납부일',true), maturity:raw.maturity ? date(raw.maturity) : '', dayBasis:raw.dayBasis === '365' ? '365' : 'actual', note:String(raw.note || '').slice(0,500), events:[] };
     if (!loan.id || loan.id.length > 100) throw new Error('대출 식별자가 올바르지 않습니다.');
-    if (loan.paymentDay < 1 || loan.paymentDay > 31) throw new Error('이자 납부일은 1~31일입니다.');
+    if (loan.paymentDay != null && (loan.paymentDay < 1 || loan.paymentDay > 31)) throw new Error('이자 납부일은 1~31일입니다.');
     if (loan.type === 'overdraft' && loan.limit < loan.initialBalance) throw new Error('사용 잔액이 마이너스통장 한도보다 큽니다.');
     if (loan.maturity && loan.maturity < loan.startDate) throw new Error('만기일은 잔액 기준일 이후로 입력해 주세요.');
     if (loan.maturity && days(loan.startDate,loan.maturity) > 50 * 366) throw new Error('50년 이내의 만기일을 입력해 주세요.');
-    if (loan.mode !== 'bullet' && !loan.maturity) throw new Error('분할상환 계획에는 만기일이 필요합니다.');
     if (!Array.isArray(raw.events || [])) throw new Error('대출 거래 기록 형식이 올바르지 않습니다.');
     const ids = new Set();
     loan.events = (raw.events || []).map(e => {
@@ -118,6 +117,7 @@
     return dueInMonth(d.getUTCFullYear(),d.getUTCMonth()+1,day);
   }
   function nextDue(loan, asOf) {
+    if (!loan.paymentDay) return '';
     let due = monthShift(asOf,0,loan.paymentDay);
     if (due < asOf || (due === asOf && recordedInterest(loan,due,due)>0)) due = monthShift(asOf,1,loan.paymentDay);
     if (due < loan.startDate) due = monthShift(loan.startDate,0,loan.paymentDay) < loan.startDate ? monthShift(loan.startDate,1,loan.paymentDay) : monthShift(loan.startDate,0,loan.paymentDay);
@@ -127,7 +127,7 @@
   function plan(loan, asOf) {
     date(asOf);
     const current = at(loan,asOf);
-    if (!current.balance || !loan.maturity || loan.maturity < asOf) return [];
+    if (!current.balance || !loan.maturity || !loan.paymentDay || loan.mode==='unknown' || loan.maturity < asOf) return [];
     const dates = [], first = nextDue(loan,asOf);
     for (let due=first;due && due<=loan.maturity && dates.length<602;due=monthShift(due,1,loan.paymentDay)) dates.push(due);
     if (dates[dates.length-1] !== loan.maturity) dates.push(loan.maturity);

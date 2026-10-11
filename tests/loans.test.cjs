@@ -72,7 +72,20 @@ test('unknown or passed maturity does not create an invented future payoff plan'
   assert.deepEqual(api.plan(base({maturity:''}),'2026-01-01'),[]);
   const overdue=api.summary(base({maturity:'2026-01-31'}),'2026-02-01','2026-01-01','2026-02-01');
   assert.equal(overdue.overdue,true);assert.deepEqual(overdue.schedule,[]);
-  assert.throws(()=>base({mode:'principal',maturity:''}),/만기일/);
+  assert.deepEqual(api.plan(base({mode:'principal',maturity:''}),'2026-01-01'),[]);
+});
+
+test('incomplete screenshots retain unknown payment days and modes without inventing schedules',()=>{
+  const loan=base({mode:'unknown',paymentDay:'',maturity:'',note:'추가 확인 필요'});
+  assert.equal(loan.paymentDay,null);assert.equal(loan.mode,'unknown');
+  assert.equal(api.nextDue(loan,'2026-01-01'),'');assert.deepEqual(api.plan(loan,'2026-01-01'),[]);
+  near(api.summary(loan,'2026-01-01','2026-01-01','2026-01-01').monthly,300);
+  const restored=api.readBackup(JSON.parse(JSON.stringify({version:1,loans:[loan]})))[0];
+  assert.equal(restored.paymentDay,null);assert.equal(restored.note,'추가 확인 필요');
+  assert.deepEqual(api.plan(base({mode:'amortized',paymentDay:null}),'2026-01-01'),[]);
+  assert.deepEqual(api.plan(base({mode:'unknown',paymentDay:25}),'2026-01-01'),[]);
+  assert.throws(()=>base({paymentDay:0}),/납부일/);
+  assert.throws(()=>base({paymentDay:32}),/납부일/);
 });
 test('backup validates ids, balances and schema; financial data cannot inject arbitrary fields',()=>{
   const loan=base();
