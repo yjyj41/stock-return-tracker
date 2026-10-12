@@ -120,3 +120,78 @@ test('balance confirmations respect overdraft limits and the original balance an
   assert.throws(()=>base({events:[{id:'a',type:'balance',date:'2025-12-31',amount:1000}]}),/기준일/);
   assert.throws(()=>base({events:[{id:'a',type:'balance',date:'2026-01-10',amount:1000,annualRate:101}]}),/금리/);
 });
+
+test('automatic payment projections reduce principal after due days without mutating records or counting costs as real',()=>{
+  const loan=base({initialBalance:1200,annualRate:0,mode:'amortized',maturity:'2026-03-31'});
+  const original=JSON.stringify(loan);
+  assert.equal(api.projection(loan,'2026-01-31').balance,1200); // Today stays visible until the day has passed.
+  const feb=api.projection(loan,'2026-02-01');near(feb.balance,800);assert.equal(feb.paid.length,1);
+  near(feb.schedule[0].total,400);
+  const mar=api.projection(loan,'2026-03-01');near(mar.balance,400);assert.equal(mar.paid.length,2);
+  assert.equal(api.projection(loan,'2026-04-01').balance,0);
+  assert.equal(api.recordedInterest(loan,'2026-01-01','2026-12-31'),0);
+  assert.equal(JSON.stringify(loan),original);
+});
+
+test('automatic interest-only payments keep overdraft usage unchanged until maturity',()=>{
+  const loan=base({type:'overdraft',limit:50000,maturity:'2026-03-31'});
+  const s=api.projection(loan,'2026-02-01');assert.equal(s.balance,36500);near(s.paid[0].interest,310);
+  assert.equal(api.projection(loan,'2026-04-01').balance,0);
+  assert.equal(api.at(loan,'2026-04-01').balance,36500); // Actual ledger remains intact.
+});
+
+test('a new confirmed balance resets assumptions; original loan inception never becomes the balance anchor',()=>{
+  const loan=base({initialBalance:1200,annualRate:0,mode:'principal',maturity:'2026-03-31',events:[{id:'snapshot',type:'balance',date:'2026-02-05',amount:1000}]});
+  const p=api.projection(loan,'2026-02-06');assert.equal(p.balance,1000);assert.equal(p.anchor,'2026-02-05');assert.equal(p.paid.length,0);
+  near(api.projection(loan,'2026-03-01').balance,500);
+});
+
+test('actual due-day and late repayments replace the assumed principal of the same billing cycle',()=>{
+  for(const day of ['2026-01-31','2026-02-01']){
+    const loan=base({initialBalance:1200,annualRate:0,mode:'principal',maturity:'2026-03-31',events:[{id:'actual',type:'repay',date:day,amount:400,interest:0}]});
+    near(api.projection(loan,'2026-02-02').balance,800);
+    near(api.projection(loan,'2026-03-01').balance,400);
+  }
+});
+
+test('draws and rate changes after projected payments affect the projection without rewriting actual balances',()=>{
+  const loan=base({initialBalance:1200,annualRate:0,mode:'principal',maturity:'2026-03-31',events:[{id:'draw',type:'draw',date:'2026-02-05',amount:200},{id:'rate',type:'rate',date:'2026-02-06',amount:5}]});
+  const p=api.projection(loan,'2026-02-07');near(p.balance,1000);assert.equal(p.rate,5);assert.equal(p.available,true);
+  assert.equal(api.at(loan,'2026-02-07').balance,1400);
+});
+
+test('same-day repayment followed by a draw does not apply another automatic repayment',()=>{
+  const loan=base({initialBalance:1200,annualRate:0,mode:'principal',maturity:'2026-03-31',events:[{id:'paid',type:'repay',date:'2026-01-31',amount:400},{id:'draw',type:'draw',date:'2026-01-31',amount:200}]});
+  near(api.projection(loan,'2026-02-01').balance,1000);
+  near(api.projection(loan,'2026-03-01').balance,500);
+});
+
+test('recording only actual interest does not erase the assumed principal repayment',()=>{
+  const loan=base({initialBalance:1200,annualRate:0,mode:'principal',maturity:'2026-03-31',events:[{id:'interest',type:'interest',date:'2026-01-31',amount:30}]});
+  near(api.projection(loan,'2026-02-01').balance,800);
+  assert.equal(api.recordedInterest(loan,'2026-01-01','2026-02-01'),30);
+});
+
+test('due windows sort dates, preserve today, flag unpriced anchor dates and include maturity balloons',()=>{
+  const a=base({id:'a',name:'A',startDate:'2026-01-15',initialBalance:1200,annualRate:0,mode:'amortized',paymentDay:15,maturity:'2026-03-15'});
+  const b=base({id:'b',name:'B',paymentDay:20,maturity:'2026-01-25'});
+  const w=api.dueWindow([b,a],'2026-01-15',30,true);
+  assert.deepEqual(w.rows.map(r=>r.date),['2026-01-15','2026-01-20','2026-01-25']);
+  assert.equal(w.rows[0].total,null);assert.equal(w.rows[0].anchorDay,true);
+  assert.equal(w.rows[2].maturity,true);assert.equal(w.rows[2].principal,36500);
+  const missing=api.dueWindow([base({paymentDay:null})],'2026-01-15',30,true);assert.deepEqual(missing.unknown,['loan']);
+  const monthEnd=api.dueWindow([base()],'2026-02-01',30,true);assert.equal(monthEnd.rows[0].date,'2026-02-28');
+});
+
+test('missing repayment terms never produce automatic settlements',()=>{
+  const loan=base({mode:'unknown',maturity:''});
+  const p=api.projection(loan,'2026-12-31');assert.equal(p.available,false);assert.equal(p.balance,36500);assert.deepEqual(p.paid,[]);
+  const overdue=base({startDate:'2026-02-01',maturity:'2026-02-01'});
+  assert.equal(api.projection(overdue,'2026-02-02').balance,36500);
+});
+
+test('first projected bills estimate a full cycle even when a balance was only entered the day before',()=>{
+  const loan=base({type:'overdraft',limit:40000,startDate:'2026-01-30'});
+  const p=api.projection(loan,'2026-01-30');near(p.schedule[0].interest,310);
+  near(api.estimate(loan,'2026-01-01','2026-01-30').amount,10); // Original observed accrual still starts at the confirmed date.
+});

@@ -8,7 +8,7 @@
 <script src="./support.js"></script>
 <script src="./importers.js?v=20261011-trade-details"></script>
 <script src="./portfolio.js?v=20261011-trade-details"></script>
-<script src="./loans.js?v=20261012-unknown-details"></script>
+<script src="./loans.js?v=20261012-auto-payments"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -29,6 +29,9 @@
   html, body { margin: 0; padding: 0; }
   body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
   input, textarea, button, select { font-family: inherit; }
+  .loan-funding-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
+  @media(max-width:480px) { .loan-funding-grid { grid-template-columns:minmax(0,1fr); } }
+  .loan-due { display:flex;align-items:center;gap:15px;flex-wrap:wrap;width:100%;text-align:left;background:#fff;border:1px solid #E5E8EB;border-radius:12px;padding:16px;margin-top:10px;color:#191F28;cursor:pointer; }
   .loan-card { background:#fff;border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05); }
   .loan-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px; }
   .loan-field { display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6B7684; }
@@ -109,15 +112,27 @@
     <sc-if value="{{ isLoans }}">
     <section aria-label="대출 관리">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;"><div><div style="font-size:20px;font-weight:800;">대출 관리</div><div style="font-size:12px;color:#8B95A1;margin-top:5px;">신용대출 · 마이너스통장 · 원화 기준</div></div><button class="loan-button primary" onClick="{{ onNewLoan }}">대출 추가</button></div>
+      <section class="loan-card" aria-label="다가오는 대출 납부 일정">
+        <div style="font-size:20px;font-weight:800;">다가오는 납부 일정</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:14px 0;"><input type="checkbox" aria-label="매월 정상 납부 가정" checked="{{ loanAutoAssume }}" onChange="{{ onToggleLoanAssume }}">매월 정상 납부 가정 · 자동 계산</label>
+        <div style="font-size:12px;line-height:1.8;color:#6B7684;">지난 납부일은 정상 납부 가정 · 오늘 일정은 계속 표시 · 예상 금액은 은행 청구액과 다를 수 있습니다.</div>
+        <div class="loan-funding-grid" style="margin:16px 0;"><sc-for list="{{ loanWindowCards }}" as="wc"><div style="padding:14px;background:#F2F4F6;border-radius:12px;"><div style="font-size:12px;font-weight:700;color:#6B7684;">{{ wc.title }}</div><div style="font-size:18px;font-weight:800;margin:6px 0;">{{ wc.total }}</div><div style="font-size:11px;line-height:1.7;color:#8B95A1;">{{ wc.detail }}</div></div></sc-for></div>
+        <div style="font-size:12px;color:#8B95A1;margin-bottom:14px;">{{ loanUpcomingWarning }}</div>
+        <sc-if value="{{ noLoanUpcoming }}"><div style="padding:18px;background:#F2F4F6;border-radius:12px;font-size:13px;">30일 이내 등록된 납부 일정이 없습니다.</div></sc-if>
+        <sc-for list="{{ loanUpcoming }}" as="due"><button onClick="{{ due.onSelect }}" class="loan-due" style="border-left:4px solid {{ due.color }};"><div style="min-width:84px;"><div style="font-size:23px;font-weight:800;">{{ due.dateLabel }}</div><div style="color: {{ due.color }};font-size:13px;font-weight:800;margin-top:4px;">{{ due.dayLabel }}</div></div><div style="flex:1;min-width:150px;"><div style="font-weight:800;font-size:14px;">{{ due.name }}</div><div style="font-size:12px;color:#6B7684;margin-top:5px;">{{ due.bank }} · {{ due.status }}</div></div><div><div style="font-size:18px;font-weight:800;">{{ due.amount }}</div><div style="font-size:11px;color:#8B95A1;margin-top:5px;">{{ due.breakdown }}</div></div></button></sc-for>
+        <details style="margin-top:14px;font-size:12px;line-height:1.8;color:#6B7684;"><summary style="font-weight:700;cursor:pointer;">자동 계산의 가정 확인</summary><div style="margin-top:8px;">{{ loanAssumptionNote }}</div></details>
+        <div style="font-size:12px;line-height:1.8;color:#8B95A1;margin-top:14px;">{{ loanAssumedTotals }}<br>예상 납부액은 은행 약정 월납입액과 다를 수 있습니다. 예상 이자는 실제 주식 순손익에서 차감하지 않습니다.</div>
+        <sc-for list="{{ loanProjectionWarnings }}" as="pw"><div style="color:#F04452;font-size:12px;margin-top:8px;">{{ pw.text }}</div></sc-for>
+      </section>
       <details class="loan-card" open><summary style="font-size:13px;font-weight:800;cursor:pointer;">카카오페이를 보며 입력하는 방법</summary><div style="font-size:12px;color:#6B7684;line-height:1.9;margin-top:10px;">① 처음 한 번: 은행·대출 이름·현재 잔액·연 금리·납부일·만기·상환 방식을 등록하세요. 마이너스통장은 한도와 실제 사용액을 구분해 입력합니다.<br>② 확인할 때: ‘잔액·금리 갱신’으로 확인 날짜와 잔액을 저장하세요. 신용대출은 월 1회 또는 상환 후, 마이너스통장은 주 1회나 사용액이 크게 변했을 때 갱신하는 방식이 편합니다.<br>③ 이자 납부 후: 은행의 실제 이자 금액을 별도 기록하세요. 원금 상환액과 이자는 나눠 기록합니다. 납부일·만기가 안 보이면 해당 은행의 대출 상세에서 확인하세요.<br>카카오페이와 자동 연결되지는 않습니다. 확인일 사이 사용액 변동은 알 수 없어 이자는 추정값이며, 주식 손익에서는 기록한 실제 이자만 차감합니다.</div></details>
       <div class="loan-grid" style="margin-bottom:16px;">
-        <div class="loan-card" style="margin:0;"><div style="font-size:12px;color:#8B95A1;">현재 대출 잔액</div><div style="font-size:27px;font-weight:800;margin-top:6px;">{{ loanDashboard.balance }}</div><div style="font-size:12px;color:#8B95A1;margin-top:6px;">{{ loanDashboard.available }}</div></div>
+        <div class="loan-card" style="margin:0;"><div style="font-size:12px;color:#8B95A1;">{{ loanBalanceTitle }}</div><div style="font-size:27px;font-weight:800;margin-top:6px;">{{ loanDashboard.balance }}</div><div style="font-size:12px;color:#8B95A1;margin-top:6px;">{{ loanDashboard.available }}</div></div>
         <div class="loan-card" style="margin:0;"><div style="font-size:12px;color:#8B95A1;">현재 잔액·금리로 30일 예상 이자</div><div style="font-size:27px;font-weight:800;margin-top:6px;">{{ loanDashboard.monthly }}</div><div style="font-size:12px;color:#8B95A1;margin-top:6px;">{{ loanDashboard.daily }}</div></div>
       </div>
       <div class="loan-card">
         <div style="font-size:13px;font-weight:800;margin-bottom:12px;">이자·손익 조회기간</div>
         <div class="loan-grid"><label class="loan-field">시작일<input class="loan-input" aria-label="대출 조회 시작일" type="date" value="{{ loanFrom }}" onInput="{{ loanSet.from }}" onChange="{{ loanSet.from }}"></label><label class="loan-field">종료일<input class="loan-input" aria-label="대출 조회 종료일" type="date" value="{{ loanTo }}" onInput="{{ loanSet.to }}" onChange="{{ loanSet.to }}"></label></div>
-        <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:15px;"><div><div style="font-size:11px;color:#8B95A1;">기록한 이자 비용</div><div style="font-weight:800;margin-top:4px;">{{ loanDashboard.recorded }}</div></div><div><div style="font-size:11px;color:#8B95A1;">일별 잔액 기준 예상 발생 이자</div><div style="font-weight:700;margin-top:4px;">{{ loanDashboard.accrued }}</div></div></div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:15px;"><div><div style="font-size:11px;color:#8B95A1;">기록한 이자 비용</div><div style="font-weight:800;margin-top:4px;">{{ loanDashboard.recorded }}</div></div><div><div style="font-size:11px;color:#8B95A1;">입력 기록 기준 발생 이자 추정 · 납부 가정 제외</div><div style="font-weight:700;margin-top:4px;">{{ loanDashboard.accrued }}</div></div></div>
         <div style="font-size:12px;color:#8B95A1;line-height:1.7;margin-top:12px;">{{ loanDashboard.coverage }} 납부한 이자와 잔액에 편입된 이자는 실제 은행 금액을 기록하세요. ‘전체 합산’에서 기록한 이자를 차감한 손익을 확인할 수 있습니다.</div>
       </div>
       <sc-if value="{{ loanMessage }}"><div role="status" style="padding:12px 16px;background:#fff;border-radius:10px;margin-bottom:14px;font-size:13px;color: {{ loanMessageColor }};">{{ loanMessage }}</div></sc-if>
@@ -456,7 +471,7 @@ class Component extends DCLogic {
     selectedView: 'samsung-summary:KRW', accountScope: 'domestic',
     importNotes: {},
     profitBasis: 'net', fxRates: {}, fxDrafts: {}, fxBusy: false, fxError: '',
-    loans: [], selectedLoanId:'', loanFormOpen:false, loanForm:blankLoan(), loanEvent:blankLoanEvent(),
+    loanAutoAssume:true, loanClockTick:'', loans: [], selectedLoanId:'', loanFormOpen:false, loanForm:blankLoan(), loanEvent:blankLoanEvent(),
     loanFrom:loanToday().slice(0,4)+'-01-01', loanTo:loanToday(), loanMessage:'', loanMessageOk:true, loanUndo:null,
     tab: 'list',
     expandedId: null,
@@ -473,6 +488,9 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this._fxRequested = new Set();
+    this._loanDate=loanToday();
+    this._loanClock=setInterval(()=>{const now=loanToday();if(now!==this._loanDate){this._loanDate=now;this.setState({loanClockTick:now});}},60000);
+    try {this.setState({loanAutoAssume:localStorage.getItem(KEY+'_loan_assume')!=='false'});} catch(e) {}
     try { const saved=localStorage.getItem(KEY+'_account');if(['domestic','overseas','combined','loans'].includes(saved))this.setState({accountScope:saved}); } catch(e) {}
     try {
       const raw = localStorage.getItem(KEY + '_loans');
@@ -507,7 +525,7 @@ class Component extends DCLogic {
     this.bindDrop();
   }
 
-  componentWillUnmount() { if (this._onResize) window.removeEventListener('resize', this._onResize); }
+  componentWillUnmount() { if(this._loanClock)clearInterval(this._loanClock); if (this._onResize) window.removeEventListener('resize', this._onResize); }
 
   componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); this.ensureFX(); }
 
@@ -572,7 +590,13 @@ class Component extends DCLogic {
   }
   renderLoanVals() {
     const st=this.state,today=loanToday(),currency=n=>money(n,'KRW');
-    const summaries=st.loans.map(l=>({loan:l,summary:StockLoans.summary(l,today,st.loanFrom,st.loanTo)}));
+    const summaries=st.loans.map(l=>{
+      const actual=StockLoans.summary(l,today,st.loanFrom,st.loanTo), projected=StockLoans.projection(l,today);
+      const summary=st.loanAutoAssume&&projected.available?{...actual,balance:projected.balance,schedule:projected.schedule,next:projected.balance?StockLoans.nextDue(l,today):'',available:l.type==='overdraft'?Math.max(0,l.limit-projected.balance):null,daily:projected.balance&&actual.balance?actual.daily*projected.balance/actual.balance:0,monthly:projected.balance&&actual.balance?actual.monthly*projected.balance/actual.balance:0,overdue:false}:actual;
+      return {loan:l,actual,projected,summary};
+    });
+    const upcoming=StockLoans.dueWindow(st.loans,today,30,st.loanAutoAssume);
+    const windowCard=(limit,title)=>{const rows=upcoming.rows.filter(r=>r.days<=limit&&!r.recorded),known=rows.filter(r=>r.total!=null),missing=rows.length-known.length;return {title,total:missing?'금액 확인 필요':currency(known.reduce((s,r)=>s+r.total,0)),detail:rows.length+'건 · '+(missing?'확인 필요 '+missing+'건 · 확인된 예상 합계 '+currency(known.reduce((s,r)=>s+r.total,0)):'예상 이자 '+currency(known.reduce((s,r)=>s+r.interest,0))+' + 원금 '+currency(known.reduce((s,r)=>s+r.principal,0)))};};
     const selected=summaries.find(x=>x.loan.id===st.selectedLoanId);
     const labels={credit:'신용대출',overdraft:'마이너스통장',bullet:'만기 일시상환',principal:'원금 균등상환',amortized:'원리금 균등상환',unknown:'상환 방식 미확인'};
     const eventLabels={draw:'추가 대출 · 사용',repay:'원금 상환',interest:'이자',rate:'금리 변경',balance:'잔액 확인'};
@@ -588,17 +612,24 @@ class Component extends DCLogic {
     const schedule=selected?selected.summary.schedule:[];
     const planTotal=schedule.reduce((s,r)=>s+r.interest,0);
     return {
+      loanAutoAssume:st.loanAutoAssume,loanBalanceTitle:st.loanAutoAssume?'오늘 예상 대출 잔액 · 정상 납부 가정':'최근 입력 기록 기준 대출 잔액',
+      loanWindowCards:[windowCard(0,'오늘 납부'),windowCard(7,'7일 이내 준비할 금액'),windowCard(30,'30일 이내 준비할 금액')],
+      loanUpcoming:upcoming.rows.map(r=>({...r,dateLabel:r.date.slice(5).replace('-',' / '),dayLabel:r.days===0?'오늘':r.days+'일 후',color:r.days===0?'#F04452':r.days<=3?'#F59E0B':'#3182F6',status:r.recorded?'실제 납부 기록 있음':r.anchorDay?'확인 기준일 당일 · 납부 여부 확인':r.maturity?'만기 상환 예정':'예상 납부 예정',amount:r.total==null?'은행 청구액 확인':currency(r.total),breakdown:r.total==null?'원금·이자 납부내역 확인 필요':'예상 이자 '+currency(r.interest)+' · 원금 '+currency(r.principal),onSelect:()=>this.selectLoan(r.loanId)})),
+      noLoanUpcoming:!upcoming.rows.length,loanUpcomingWarning:upcoming.unknown.length?'납부일 미확인 '+upcoming.unknown.length+'개 대출은 일정에서 제외됩니다. 대출 설정에서 확인해 주세요.':'일정은 사진의 예상 납부일 기준입니다. 휴일·은행 청구액은 해당 은행에서 확인하세요.',
+      loanAssumptionNote:st.loanAutoAssume?'확인 잔액 기준일 이후, 오늘보다 이전인 납부일은 정상 납부한 것으로 가정합니다. 오늘 납부는 계속 표시합니다. 입력 없이 날짜가 지나면 예상 잔액이 자동 계산되며, 실제 잔액을 갱신하면 그 금액을 기준으로 다시 계산합니다. 마이너스통장은 사용액 유지·이자 현금 납부를 가정하고 만기에 원금을 갚습니다. 첫 납부일 전의 미확인 기간도 현재 잔액·금리로 한 납부기간 이자를 추정합니다. 실제 은행에서 자동이체를 실행하는 기능은 아닙니다.':'자동 납부 가정이 꺼져 있습니다. 직접 입력한 원금·잔액 기록만 잔액에 반영합니다.',
+      loanAssumedTotals:'정상 납부 가정: '+currency(summaries.reduce((s,x)=>s+x.projected.paid.reduce((n,r)=>n+r.principal,0),0))+' 원금 · '+currency(summaries.reduce((s,x)=>s+x.projected.paid.reduce((n,r)=>n+r.interest,0),0))+' 이자 · 실제 거래 기록에는 추가되지 않음',
+      loanProjectionWarnings:summaries.filter(x=>st.loanAutoAssume&&x.projected.warning).map(x=>({text:x.loan.name+' · '+x.projected.warning})),
       loanToday:today,loanFrom:st.loanFrom,loanTo:st.loanTo,loanSet,loanEventSet,loanForm:st.loanForm,loanEvent:st.loanEvent,
       loanMessage:st.loanMessage,loanMessageColor:st.loanMessageOk?'#3182F6':'#F04452',loanUndoAvailable:st.loanUndo!==null,
       loanFormOpen:st.loanFormOpen,loanFormTitle:st.loanForm.id?'대출 설정 수정':'대출 등록',loanFormOverdraft:st.loanForm.type==='overdraft',loanFormCredit:st.loanForm.type==='credit',
       noLoans:!st.loans.length,hasSelectedLoan:!!selected,selectedLoanTitle:selected?selected.loan.name+' · 실제 거래 기록':'',
       loanDashboard:{balance:currency(sum('balance')),available:'마이너스통장 남은 한도 '+currency(summaries.reduce((s,x)=>s+(x.summary.available||0),0)),monthly:currency(sum('monthly')),daily:'현재 잔액 기준 하루 약 '+currency(sum('daily')),recorded:currency(sum('recorded')),accrued:currency(summaries.reduce((s,x)=>s+x.summary.estimate.amount,0)),coverage:st.loanFrom+' ~ '+st.loanTo+' · '+(summaries.some(x=>x.summary.estimate.partial)?'예상 이자는 대출별 기준일 이후에만 계산됩니다.':'기록한 잔액·금리 기준입니다.')+' 잔액 확인일 사이의 사용액 변동은 추정에 반영되지 않습니다.'},
-      loanCards:summaries.map(({loan:l,summary:s})=>({name:l.name,description:(l.bank?l.bank+' · ':'')+labels[l.type]+' · 연 '+s.rate+'% · '+labels[l.mode],balance:currency(s.balance),available:l.type==='overdraft'?'한도 '+currency(l.limit)+' · 남은 한도 '+currency(s.available):'기준 잔액일 '+l.startDate,border:l.id===st.selectedLoanId?'#3182F6':'transparent',nextLabel:s.balance?(!l.paymentDay?'매월 납부일 미확인':s.next?'다음 이자'+(l.mode==='bullet'?'':'·원금')+' 납부일 '+s.next+' · 매월 '+l.paymentDay+'일':'정기 납부일이 만기 이후입니다. 은행 상환 내역을 확인하세요.'):'대출 잔액 0원',maturityLabel:l.maturity?'만기 '+l.maturity+(s.overdue?' · 만기 경과, 잔액 확인 필요':s.balance&&StockLoans.days(today,l.maturity)<=30?' · '+StockLoans.days(today,l.maturity)+'일 남음':''):'만기일 미등록',dueColor:s.overdue?'#F04452':'#4E5968',interestLabel:'조회기간 기록 이자 '+currency(s.recorded)+' · 현재 잔액으로 30일 약 '+currency(s.monthly),confirmed:'잔액 확인일 '+s.confirmed+' · 이후 거래 기록 반영',onSnapshot:()=>this.selectLoan(l.id,{...blankLoanEvent(),type:'balance',amount:String(s.balance),annualRate:String(s.rate),memo:'카카오페이 / 은행에서 확인'}),onSelect:()=>this.selectLoan(l.id),note:l.note,onEdit:()=>this.setState({selectedLoanId:l.id,loanForm:{...l},loanFormOpen:true,loanMessage:''}),onDelete:()=>this.setLoans(this.state.loans.filter(x=>x.id!==l.id),{loanEvent:blankLoanEvent(),loanFormOpen:false,loanMessage:'대출을 삭제했습니다. 새로고침 전 직전 변경을 되돌릴 수 있습니다.'})})),
+      loanCards:summaries.map(({loan:l,actual:a,projected:p,summary:s})=>({name:l.name,description:(l.bank?l.bank+' · ':'')+labels[l.type]+' · 연 '+s.rate+'% · '+labels[l.mode],balance:currency(s.balance),available:l.type==='overdraft'?'한도 '+currency(l.limit)+' · 남은 한도 '+currency(s.available):'기준 잔액일 '+l.startDate,border:l.id===st.selectedLoanId?'#3182F6':'transparent',nextLabel:s.balance?(!l.paymentDay?'매월 납부일 미확인':s.next?'다음 이자'+(l.mode==='bullet'?'':'·원금')+' 납부일 '+s.next+' · 매월 '+l.paymentDay+'일':'정기 납부일이 만기 이후입니다. 은행 상환 내역을 확인하세요.'):'대출 잔액 0원',maturityLabel:l.maturity?'만기 '+l.maturity+(s.overdue?' · 만기 경과, 잔액 확인 필요':s.balance&&StockLoans.days(today,l.maturity)<=30?' · '+StockLoans.days(today,l.maturity)+'일 남음':''):'만기일 미등록',dueColor:s.overdue?'#F04452':'#4E5968',interestLabel:'조회기간 기록 이자 '+currency(s.recorded)+' · 현재 잔액으로 30일 약 '+currency(s.monthly),confirmed:'최근 입력 잔액 '+currency(a.balance)+' · 확인일 '+p.anchor+(st.loanAutoAssume&&p.available?' · 정상 납부 가정 잔액 표시':''),onSnapshot:()=>this.selectLoan(l.id,{...blankLoanEvent(),type:'balance',amount:String(a.balance),annualRate:String(s.rate),memo:'카카오페이 / 은행에서 확인'}),onSelect:()=>this.selectLoan(l.id),note:l.note,onEdit:()=>this.setState({selectedLoanId:l.id,loanForm:{...l},loanFormOpen:true,loanMessage:''}),onDelete:()=>this.setLoans(this.state.loans.filter(x=>x.id!==l.id),{loanEvent:blankLoanEvent(),loanFormOpen:false,loanMessage:'대출을 삭제했습니다. 새로고침 전 직전 변경을 되돌릴 수 있습니다.'})})),
       loanHistory,loanEventBalance:st.loanEvent.type==='balance',loanEventRepay:st.loanEvent.type==='repay',loanEventInterest:st.loanEvent.type==='interest',loanEventAmountTitle:st.loanEvent.type==='balance'?'확인한 대출 잔액 (원 · 0원 가능)':st.loanEvent.type==='rate'?'변경 후 연 금리 (%)':st.loanEvent.type==='repay'?'상환한 원금 (원 · 이자 제외)':'거래 금액 (원)',loanEventSaveLabel:st.loanEvent.id?'기록 수정 저장':'거래 기록 저장',
       loanPlan:schedule.map(r=>({date:r.date,principal:currency(r.principal),interest:currency(r.interest),total:currency(r.total),balance:currency(r.balance)})),
-      loanPlanNote:selected?(schedule.length?'오늘 잔액·현재 금리를 유지한다고 가정한 '+schedule.length+'회 계획입니다. 기록 기준 납부기간의 발생 이자를 첫 납부액에 포함합니다. 원금 '+currency(selected.summary.balance)+' · 예상 이자 합계 '+currency(planTotal)+'. 일별 이자로 재계산한 참고 계획으로 은행의 약정 월납입액과 다를 수 있습니다. 금리·사용액 변경, 휴일 조정·절사는 반영하지 않습니다. 일정이 자동으로 실제 납부 기록에 추가되지는 않습니다.':!selected.summary.balance?'잔액이 없어 예정 상환이 없습니다.':selected.loan.mode==='unknown'||!selected.loan.paymentDay?'상환 방식·매월 납부일·만기일을 확인하면 예상 상환 계획을 볼 수 있습니다.':selected.summary.overdue?'만기가 지났습니다. 실제 상환 여부와 연체 이자를 은행 내역으로 확인해 주세요.':'만기일을 등록하면 예상 상환 계획을 볼 수 있습니다.'):'',
+      loanPlanNote:selected?(schedule.length?(st.loanAutoAssume?'확인 잔액 이후 매월 정상 납부하는 가정입니다. ':'오늘 입력 잔액을 기준으로 계산합니다. ')+'남은 '+schedule.length+'회 계획입니다. 원금 감소는 확인 기준일 다음날부터 적용합니다. 첫회 이자도 한 납부기간을 가정해 계산합니다. 원금 '+currency(selected.summary.balance)+' · 예상 이자 합계 '+currency(planTotal)+'. 일별 이자로 재계산한 참고 계획으로 은행의 약정 월납입액과 다를 수 있습니다. 금리·사용액 변경, 휴일 조정·절사는 반영하지 않습니다. 일정이 자동으로 실제 납부 기록에 추가되지는 않습니다.':!selected.summary.balance?'잔액이 없어 예정 상환이 없습니다.':selected.loan.mode==='unknown'||!selected.loan.paymentDay?'상환 방식·매월 납부일·만기일을 확인하면 예상 상환 계획을 볼 수 있습니다.':selected.summary.overdue?'만기가 지났습니다. 실제 상환 여부와 연체 이자를 은행 내역으로 확인해 주세요.':'만기일을 등록하면 예상 상환 계획을 볼 수 있습니다.'):'',
       loanAdjusted:{total:missingNet?'삼성 순손익표 필요':!hasStockData?'주식 순손익 파일 필요':adjusted==null?'환율 확인 필요':(adjusted>=0?'+':'')+currency(adjusted),color:adjusted==null?'#8B95A1':adjusted<0?BLUE:RED,detail:st.loanFrom+' ~ '+st.loanTo+' · 기간 내 주식 순손익 '+(!hasStockData||missingNet||stockPeriod.total==null?'미확인':currency(stockPeriod.total))+' − 기록한 대출 이자 '+currency(sum('recorded'))+' (현금 납부·대출 잔액 편입 포함)'+(stockPeriod.estimated?' · 주식 일부 비용 범위 미확인':'')},
-      onNewLoan:()=>this.setState({loanForm:blankLoan(),loanFormOpen:true,loanMessage:''}),onSaveLoan:e=>this.saveLoan(e),onCancelLoan:()=>this.setState({loanFormOpen:false}),onSaveLoanEvent:e=>this.saveLoanEvent(e),onResetLoanEvent:()=>this.setState({loanEvent:blankLoanEvent()}),onUndoLoans:()=>this.setLoans(this.state.loanUndo||[],{loanMessage:'직전 변경을 되돌렸습니다.',loanFormOpen:false,loanEvent:blankLoanEvent()},false),onExportLoans:()=>this.exportLoans(),onImportLoans:e=>this.importLoans(e),onOpenLoans:()=>this.selectAccount('loans')
+      onNewLoan:()=>this.setState({loanForm:blankLoan(),loanFormOpen:true,loanMessage:''}),onSaveLoan:e=>this.saveLoan(e),onCancelLoan:()=>this.setState({loanFormOpen:false}),onSaveLoanEvent:e=>this.saveLoanEvent(e),onResetLoanEvent:()=>this.setState({loanEvent:blankLoanEvent()}),onUndoLoans:()=>this.setLoans(this.state.loanUndo||[],{loanMessage:'직전 변경을 되돌렸습니다.',loanFormOpen:false,loanEvent:blankLoanEvent()},false),onExportLoans:()=>this.exportLoans(),onImportLoans:e=>this.importLoans(e),onOpenLoans:()=>this.selectAccount('loans'),onToggleLoanAssume:e=>{try{localStorage.setItem(KEY+'_loan_assume',String(e.target.checked));this.setState({loanAutoAssume:e.target.checked});}catch(err){this.setState({loanMessage:'납부 가정 설정을 저장하지 못했습니다.',loanMessageOk:false});}}
     };
   }
 

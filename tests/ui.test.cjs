@@ -53,3 +53,15 @@ test('adjusted profit requires stock data and never labels a partial foreign sum
   c.state.trades=[{id:'ledger',source:'samsung-ledger',name:'국내',qty:1,buyPrice:100,sellPrice:150,buyDate:'2026-01-01',sellDate:'2026-01-02'}, {id:'foreign',source:'trading212',name:'해외',currency:'KRW',qty:1,buyPrice:100,sellPrice:150,realizedPnl:50,buyDate:'2026-01-01',sellDate:'2026-01-02'}];
   v=c.renderVals();assert.equal(v.loanAdjusted.total,'삼성 순손익표 필요');assert.match(v.loanAdjusted.detail,/순손익 미확인/);
 });
+
+test('upcoming due cards expose dates and missing bill amounts while auto projections keep actual costs separate',()=>{
+  const c=app();
+  const today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'});
+  const maturity=loans.shift(today,365);
+  c.state.loans=[loans.normalize({id:'loan',name:'오늘 대출',bank:'테스트 은행',type:'credit',mode:'amortized',startDate:today,initialBalance:1000000,annualRate:6,paymentDay:Number(today.slice(8,10)),maturity,events:[]})];
+  c.state.loanAutoAssume=true;
+  let v=c.renderVals();assert.equal(v.loanUpcoming[0].dayLabel,'오늘');assert.equal(v.loanUpcoming[0].amount,'은행 청구액 확인');
+  assert.equal(v.loanWindowCards[0].total,'금액 확인 필요');assert.match(v.loanBalanceTitle,/정상 납부 가정/);
+  assert.equal(v.loanDashboard.recorded,'0원');assert.equal(c.state.loans[0].events.length,0);
+  c.state.loanAutoAssume=false;v=c.renderVals();assert.match(v.loanAssumptionNote,/꺼져/);assert.match(v.loanBalanceTitle,/입력 기록/);
+});

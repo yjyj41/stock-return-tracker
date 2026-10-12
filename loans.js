@@ -124,18 +124,20 @@
     if (loan.maturity && due > loan.maturity) return loan.maturity >= asOf ? loan.maturity : '';
     return due;
   }
-  function plan(loan, asOf) {
+  function plan(loan, asOf, options) {
     date(asOf);
     const current = at(loan,asOf);
     if (!current.balance || !loan.maturity || !loan.paymentDay || loan.mode==='unknown' || loan.maturity < asOf) return [];
     const dates = [], first = nextDue(loan,asOf);
     for (let due=first;due && due<=loan.maturity && dates.length<602;due=monthShift(due,1,loan.paymentDay)) dates.push(due);
     if (dates[dates.length-1] !== loan.maturity) dates.push(loan.maturity);
-    let periodStart = monthShift(first,-1,loan.paymentDay);
+    const previousDue=monthShift(first,-1,loan.paymentDay);
+    let periodStart = previousDue;
     const latestPayment = loan.events.filter(e=>e.date<=asOf && (e.type==='interest'||(e.type==='repay'&&e.interest>0))).map(e=>e.date).sort().pop();
     if (latestPayment && latestPayment > periodStart) periodStart = latestPayment;
     if (periodStart < loan.startDate) periodStart = loan.startDate;
-    const pastInterest = periodStart < asOf ? estimate(loan,periodStart,shift(asOf,-1)).amount : 0;
+    let pastInterest = periodStart < asOf ? estimate(loan,periodStart,shift(asOf,-1)).amount : 0;
+    if(options&&options.fullCycle&&periodStart===loan.startDate&&previousDue<loan.startDate)pastInterest+=loan.initialBalance*factor(loan.annualRate,loan.dayBasis,previousDue,loan.startDate);
     let cursor = asOf;
     const factors = dates.map(d=>{ const f=factor(current.rate,loan.dayBasis,cursor,d);cursor=d;return f; });
     let fixed = 0;
@@ -166,11 +168,83 @@
       recorded:recordedInterest(loan,from,to),estimate:estimate(loan,from,to),next:current.balance?next:'',schedule,
       overdue:!!(current.balance&&loan.maturity&&loan.maturity<asOf)};
   }
+  // Replay assumed payments only in a disposable model. Never persist them as bank transactions.
+  function projection(loan, asOf) {
+    date(asOf);
+    const observed=at(loan,asOf);
+    const anchors=timeline(loan).filter(r=>r.date<=asOf && (!r.id||r.type==='balance'));
+    const anchor=anchors[anchors.length-1];
+    const fallback={balance:observed.balance,rate:observed.rate,anchor:anchor?anchor.date:loan.startDate,paid:[],schedule:[],available:false};
+    if(!anchor||!loan.paymentDay||!loan.maturity||loan.mode==='unknown')return fallback;
+    if(!anchor.balance)return {...fallback,balance:0,available:true};
+    if(anchor.date>=loan.maturity)return {...fallback,warning:'확인 잔액 기준일이 만기일 이후입니다. 실제 상환 여부를 확인하세요.'};
+    const changes=loan.events.map((e,i)=>({...e,order:i})).filter(e=>e.date>anchor.date&&e.date<=asOf).sort((a,b)=>a.date.localeCompare(b.date)||a.order-b.order);
+    const replaced=new Set();
+    for(const e of changes.filter(e=>e.type==='repay')) {
+      let due=monthShift(e.date,0,loan.paymentDay);
+      if(due>e.date)due=monthShift(e.date,-1,loan.paymentDay);
+      if(due>anchor.date)replaced.add(due);
+      if(e.date>=loan.maturity)replaced.add(loan.maturity);
+    }
+    const model={...loan,startDate:anchor.date,initialBalance:anchor.balance,annualRate:anchor.rate,events:[]};
+    const paid=[];
+    let cursor=shift(anchor.date,1), serial=0;
+    function advance(before) {
+      const rows=plan(model,cursor,{fullCycle:true});
+      for(const row of rows.filter(r=>r.date<before)) {
+        if(!replaced.has(row.date)) {
+          model.events.push({id:'assumed-'+serial++,type:'repay',date:row.date,amount:Math.min(at(model,row.date).balance,row.principal),interest:row.interest});
+          paid.push(row);
+        }
+        // Establish a paid cycle even for zero-interest loans, without changing the actual ledger.
+        model.events.push({id:'cycle-'+serial++,type:'interest',date:row.date,amount:0});
+      }
+      // Preserve the unmodified future schedule between real changes: do not rescale installments on every visit.
+      return rows.filter(r=>r.date>=before);
+    }
+    try {
+      for(const e of changes) {
+        advance(e.date);
+        model.events.push(e.type==='interest'&&!e.capitalized?{...e,amount:0}:e);
+        timeline(model);
+        const nextCursor=e.type==='repay'?shift(e.date,1):e.date;
+        if(nextCursor>cursor)cursor=nextCursor;
+      }
+      const schedule=advance(asOf);
+      const current=at(model,asOf);
+      return {balance:current.balance,rate:current.rate,anchor:anchor.date,paid,schedule,available:true};
+    } catch(e) {
+      return {...fallback,warning:'실제 기록과 납부 가정이 맞지 않습니다. 잔액을 확인해 갱신하세요.'};
+    }
+  }
+  function dueWindow(loans, asOf, horizon, assume) {
+    const end=shift(asOf,horizon), rows=[],unknown=[];
+    for(const loan of loans) {
+      const current=at(loan,asOf), projected=projection(loan,asOf);
+      const schedule=assume&&projected.available?projected.schedule:plan(loan,asOf);
+      if(!(assume?projected.balance:current.balance))continue;
+      const dates=[];
+      if(loan.paymentDay) {
+        let due=monthShift(asOf,0,loan.paymentDay);
+        if(due<asOf)due=monthShift(asOf,1,loan.paymentDay);
+        for(;due<=end;due=monthShift(due,1,loan.paymentDay))if(due>=loan.startDate&&(!loan.maturity||due<=loan.maturity))dates.push(due);
+      } else unknown.push(loan.id);
+      if(loan.maturity&&loan.maturity>=asOf&&loan.maturity<=end&&!dates.includes(loan.maturity))dates.push(loan.maturity);
+      for(const due of dates) {
+        const amount=schedule.find(r=>r.date===due);
+        const bankRecorded=recordedInterest(loan,due,due)>0||loan.events.some(e=>e.type==='repay'&&e.date===due);
+        const sameAnchor=due<=projected.anchor;
+        rows.push({loanId:loan.id,name:loan.name,bank:loan.bank,date:due,days:days(asOf,due),principal:amount&&!sameAnchor?amount.principal:null,interest:amount&&!sameAnchor?amount.interest:null,total:amount&&!sameAnchor?amount.total:null,recorded:bankRecorded,maturity:due===loan.maturity,anchorDay:sameAnchor});
+      }
+    }
+    rows.sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name));
+    return {rows,unknown};
+  }
   function readBackup(raw) {
     if (!raw || raw.version!==1 || !Array.isArray(raw.loans) || raw.loans.length>500) throw new Error('수익노트 대출 백업 JSON 파일을 선택해 주세요.');
     const loans=raw.loans.map(normalize),ids=new Set(loans.map(l=>l.id));
     if(ids.size!==loans.length)throw new Error('중복된 대출 기록이 있습니다.');
     return loans;
   }
-  return {date,shift,days,normalize,timeline,at,estimate,recordedInterest,nextDue,plan,summary,readBackup};
+  return {date,shift,days,normalize,timeline,at,estimate,recordedInterest,nextDue,plan,summary,projection,dueWindow,readBackup};
 });
