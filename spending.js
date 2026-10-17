@@ -3,16 +3,22 @@
 "use strict";
 // ---------- storage ----------
 const KEY="spend_tracker_v1";
+const FXKEY='suiknote_v1_fx',DISPLAYKEY='spend_tracker_display_v2';
 let storageProblem='';
 let store=load();
 function load(){try{const raw=localStorage.getItem(KEY);return raw?SpendingCore.normalize(JSON.parse(raw)):SpendingCore.empty();}catch(e){storageProblem='기존 기록을 읽지 못했습니다. 원본 데이터는 보존되어 있습니다. 지출 백업 파일로 복원하세요. '+e.message;return SpendingCore.empty();}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(SpendingCore.normalize(store)));return true;}catch(e){store=load();cur=store.currency;document.getElementById('currency').value=cur;render();toast('저장하지 못했습니다. '+e.message);return false;}}
-let cur=store.currency;
-document.getElementById('currency').value=cur;
+function save(){try{localStorage.setItem(KEY,JSON.stringify(SpendingCore.normalize(store)));return true;}catch(e){store=load();render();toast('저장하지 못했습니다. '+e.message);return false;}}
+let displayOrder=store.currency==='₩'?'KRW':'GBP';
+try{const order=localStorage.getItem(DISPLAYKEY);if(['GBP','KRW'].includes(order))displayOrder=order;}catch(e){}
+function loadRates(){try{const raw=JSON.parse(localStorage.getItem(FXKEY)||'{}');return Object.fromEntries(Object.entries(raw||{}).filter(([c,r])=>/^[A-Z]{3}$/.test(c)&&StockPortfolio.validRate(r)));}catch(e){return {};}}
+let fxRates=loadRates(),fxBusy=false,fxError='';
+const currentRate=()=>StockPortfolio.validRate(fxRates.GBP)?fxRates.GBP:null;
+document.getElementById('currency').value=displayOrder;
 function ingest(text){const result=SpendingCore.mergeCSV(store,text);localStorage.setItem(KEY,JSON.stringify(result.store));store=result.store;return result.added;}
 
 // ---------- helpers ----------
-const fmt=n=>cur+Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:2,minimumFractionDigits:n%1?2:0});
+const fmt=(n,signed=false)=>SpendingCore.formatDual(n,currentRate()?.rate,displayOrder,signed);
+const primary=n=>displayOrder==='KRW'?(currentRate()?Math.abs(n*currentRate().rate).toLocaleString('ko-KR',{maximumFractionDigits:0})+'원':'환율 확인 필요'):'£'+Math.abs(n).toLocaleString('ko-KR',{maximumFractionDigits:2});
 const ym=d=>d.slice(0,7);
 const monthLabel=m=>{const[y,mo]=m.split("-");return `${y}.${mo}`;};
 function spendingOf(list){return list.filter(t=>t.amount<0).reduce((s,t)=>s+(-t.amount),0);}
@@ -27,6 +33,7 @@ const palette=["#3182F6","#34d399","#fbbf24","#f87171","#a78bfa","#22d3ee","#fb9
 // ---------- render ----------
 function render(){
   requestAnimationFrame(notifyParent);
+  renderFX();
   document.getElementById("storageNotice").textContent=storageProblem;
   document.getElementById("totalBudget").value=store.totalBudget||'';
   const ms=months();
@@ -68,7 +75,7 @@ function render(){
   }
   document.getElementById("cards").innerHTML=`
     <div class="panel card"><div class="label">이번 달 총지출 (${monthLabel(m)})</div><div class="value">${fmt(curSpend)}</div>${deltaHtml}</div>
-    <div class="panel card"><div class="label">이번 달 수입</div><div class="value">${fmt(income)}</div><div class="delta flat">순흐름 ${income-curSpend>=0?"+":""}${fmt(income-curSpend)}</div></div>
+    <div class="panel card"><div class="label">이번 달 수입</div><div class="value">${fmt(income)}</div><div class="delta flat">순흐름 ${fmt(income-curSpend,true)}</div></div>
     <div class="panel card"><div class="label">거래 건수</div><div class="value">${cur_tx.length}</div><div class="delta flat">지출 ${cur_tx.filter(t=>t.amount<0).length}건</div></div>
     ${budgetCard}`;
 
@@ -121,7 +128,7 @@ function render(){
   document.getElementById("catBudgets").innerHTML=inputCats.map(c=>`
     <div class="budget-row">
       <span>${esc(c)} <span class="muted" style="font-size:12px">· 이번 달 ${fmt(catMap[c]||0)}</span></span>
-      <input type="number" data-cat="${esc(c)}" class="catBudgetInput" placeholder="목표" value="${store.budgets[c]||""}" style="width:110px">
+      <input type="number" data-cat="${esc(c)}" aria-label="${esc(c)} 예산 (£ GBP)" class="catBudgetInput" placeholder="목표 (£)" value="${store.budgets[c]||""}" style="width:110px">
     </div>`).join("")||`<span class="muted">거래를 올리면 카테고리가 나타납니다.</span>`;
   document.querySelectorAll(".catBudgetInput").forEach(inp=>{
     inp.addEventListener("change",()=>{
@@ -242,7 +249,7 @@ function renderGoals(){
   const el=document.getElementById("goalList");
   // overall net flow hint
   const net=store.tx.reduce((s,t)=>s+t.amount,0);
-  document.getElementById("netHint").textContent=store.tx.length?`전체 순흐름 ${net>=0?"+":""}${fmt(net)}`:"";
+  document.getElementById("netHint").textContent=store.tx.length?`전체 순흐름 ${fmt(net,true)}`:"";
   if(!store.goals.length){el.innerHTML=`<div class="empty" style="padding:14px">아직 목표가 없어요. 아래에서 추가해보세요.</div>`;return;}
   el.innerHTML=store.goals.map((g,i)=>{
     const pct=Math.max(0,Math.min(g.current/g.target*100,100));const done=g.current>=g.target;
@@ -253,7 +260,7 @@ function renderGoals(){
       </div>
       <div class="bar" style="height:12px"><i style="width:${pct}%"></i></div>
       <div class="row" style="margin-top:8px">
-        <input type="number" placeholder="저축액 추가" data-add="${i}" style="width:130px">
+        <input type="number" placeholder="저축액 추가 (£)" aria-label="${esc(g.name)} 저축액 추가 (£ GBP)" data-add="${i}" style="width:150px">
         <button class="ghost addToGoal" data-i="${i}">+ 추가</button>
         <button class="ghost delGoal" data-i="${i}">삭제</button>
       </div>
@@ -274,7 +281,7 @@ function budgetBar(label,actual,budget){
 function baseOpts(o={}){return{responsive:true,maintainAspectRatio:false,
   plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${o.money?fmt(c.parsed.y??c.parsed):c.parsed}`}}},
   scales:{x:{ticks:{color:"#6B7684"},grid:{display:false}},
-    y:{ticks:{color:"#6B7684",callback:v=>o.money?fmt(v):v},grid:{color:"#E5E8EB"}}}};}
+    y:{title:{display:!!o.money,text:displayOrder==='KRW'?'KRW (원화 환산)':'GBP (파운드)'},ticks:{color:"#6B7684",callback:v=>o.money?primary(v):v},grid:{color:"#E5E8EB"}}}};}
 
 let txFilter="";
 function renderTx(list){
@@ -283,7 +290,7 @@ function renderTx(list){
   document.getElementById("txCount").textContent=`(${rows.length}건)`;
   document.getElementById("txBody").innerHTML=rows.map(t=>`
     <tr><td>${t.date}</td><td>${esc(t.name)}</td><td><span class="tag">${esc(t.category)}</span></td>
-    <td class="amt ${t.amount<0?'':'down'}">${t.amount<0?"-":"+"}${fmt(t.amount)}</td></tr>`).join("")
+    <td class="amt ${t.amount<0?'':'down'}">${fmt(t.amount,true)}</td></tr>`).join("")
     ||`<tr><td colspan="4" class="empty">거래 없음</td></tr>`;
 }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -310,7 +317,7 @@ async function handleFiles(files){
 document.getElementById("month").addEventListener("change",render);
 document.getElementById("search").addEventListener("input",e=>{txFilter=e.target.value;
   const m=document.getElementById("month").value;renderTx(store.tx.filter(t=>ym(t.date)===m));});
-document.getElementById("currency").addEventListener("change",e=>{cur=e.target.value;store.currency=cur;if(!save())return;render();});
+document.getElementById("currency").addEventListener("change",e=>{const order=e.target.value;if(!['GBP','KRW'].includes(order))return;try{localStorage.setItem(DISPLAYKEY,order);displayOrder=order;render();}catch(err){document.getElementById('currency').value=displayOrder;toast('표시 설정을 저장하지 못했습니다.');}});
 document.getElementById("saveBudget").addEventListener("click",()=>{
   const v=parseFloat(document.getElementById("totalBudget").value);
   store.totalBudget=v>0?v:null;if(!save())return;render();toast("목표 저장됨");});
@@ -323,7 +330,7 @@ document.getElementById("addGoal").addEventListener("click",()=>{
   render();toast("목표 추가됨");});
 document.getElementById("clearBtn").addEventListener("click",()=>{
   if(confirm("모든 거래와 예산 설정을 삭제할까요? 되돌릴 수 없습니다.")){
-    store={tx:[],budgets:{},totalBudget:null,currency:cur,goals:[]};if(!save())return;render();toast("삭제 완료");}});
+    store={tx:[],budgets:{},totalBudget:null,currency:store.currency,goals:[]};if(!save())return;render();toast("삭제 완료");}});
 document.getElementById("exportBtn").addEventListener("click",()=>{
   const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
@@ -331,16 +338,45 @@ document.getElementById("exportBtn").addEventListener("click",()=>{
 document.getElementById("importBtn").addEventListener("click",()=>document.getElementById("importFile").click());
 document.getElementById("importFile").addEventListener("change",async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{if(f.size>20*1024*1024)throw new Error('20MB 이하 백업 파일을 선택하세요.');const restored=SpendingCore.normalize(JSON.parse(await f.text()));localStorage.setItem(KEY,JSON.stringify(restored));store=restored;storageProblem='';cur=store.currency;document.getElementById('currency').value=cur;render();toast('복원 완료');}
+  try{if(f.size>20*1024*1024)throw new Error('20MB 이하 백업 파일을 선택하세요.');const restored=SpendingCore.normalize(JSON.parse(await f.text()));localStorage.setItem(KEY,JSON.stringify(restored));store=restored;storageProblem='';render();toast('복원 완료');}
   catch(err){toast('복원하지 못했습니다. 기존 기록은 유지됩니다. '+err.message);}
 });
 function notifyParent(){
   if(window.parent!==window)window.parent.postMessage({type:'suiknote-spending-size',height:Math.ceil(document.body.getBoundingClientRect().height)+8,count:store.tx.length},location.origin);
 }
 if(typeof ResizeObserver==='function')new ResizeObserver(()=>requestAnimationFrame(notifyParent)).observe(document.body);
-window.addEventListener('storage',e=>{if(e.key===KEY){store=load();cur=store.currency;document.getElementById('currency').value=cur;render();}});
+window.addEventListener('storage',e=>{if(e.key===KEY||e.key===null){store=load();render();}if(e.key===FXKEY||e.key===null){fxRates=loadRates();fxError='';render();}});
+
+function renderFX(){
+  const rate=currentRate();
+  document.getElementById('fxSummary').textContent=(rate?'1 GBP = '+rate.rate.toLocaleString('ko-KR',{maximumFractionDigits:4})+'원 · '+rate.date+' · '+rate.source:'환율 미확인 · 원화 환산액을 표시하려면 환율을 조회하거나 직접 입력하세요.')+(fxBusy?' · 조회 중…':'');
+  const input=document.getElementById('fxRate');if(document.activeElement!==input)input.value=rate?rate.rate:'';
+  document.getElementById('fxError').textContent=fxError;
+  document.getElementById('refreshFX').disabled=fxBusy;document.getElementById('applyFX').disabled=fxBusy;
+}
+function saveRate(rate){
+  const next={...loadRates(),GBP:rate};localStorage.setItem(FXKEY,JSON.stringify(next));fxRates=next;
+  if(window.parent!==window)window.parent.postMessage({type:'suiknote-spending-fx'},location.origin);
+}
+document.getElementById('applyFX').addEventListener('click',()=>{
+  const value=document.getElementById('fxRate').value.trim(),rate=Number(value);
+  if(!value||!Number.isFinite(rate)||rate<=0){fxError='1 GBP당 원화 환율을 양수로 입력하세요.';renderFX();return;}
+  try{saveRate({rate,date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}),source:'수동입력',fetchedAt:new Date().toISOString()});fxError='';render();}
+  catch(e){fxError='환율을 저장하지 못했습니다. 기존 환율을 유지합니다.';renderFX();}
+});
+async function refreshFX(){
+  if(fxBusy)return;fxBusy=true;fxError='';renderFX();
+  const requestedRate=JSON.stringify(loadRates().GBP);
+  try{const result=await StockPortfolio.fetchRates(['GBP'],(url,options)=>fetch(url,options));
+    if(!result.rates.GBP)throw new Error('조회 실패');
+    if(JSON.stringify(loadRates().GBP)===requestedRate)saveRate(result.rates.GBP);else fxRates=loadRates();
+  }catch(e){fxError='최신 환율을 불러오지 못했습니다. 저장된 환율이 있으면 유지합니다. 직접 입력도 가능합니다.';}
+  finally{fxBusy=false;render();}
+}
+document.getElementById('refreshFX').addEventListener('click',refreshFX);
 
 
 render();
+if(typeof fetch==='function'&&currentRate()?.source!=='수동입력')refreshFX();
 
 })();

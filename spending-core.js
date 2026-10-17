@@ -65,10 +65,12 @@
     const store=normalize(raw),rows=parseCSV(csv);if(!rows.length)throw new Error('CSV 파일이 비어 있습니다.');
     const head=rows[0],iDate=idx(head,'date','transaction date','started date'),iAmt=idx(head,'amount','value'),iOut=idx(head,'money out'),iIn=idx(head,'money in');
     if(iDate<0||(iAmt<0&&iOut<0&&iIn<0))throw new Error('Date와 Amount 또는 Money Out / Money In 열이 필요합니다.');
+    const iCurrency=head.findIndex(h=>['currency','account currency'].includes(String(h).trim().toLowerCase()));
     const iId=idx(head,'transaction id','id'),iCat=idx(head,'category'),iName=idx(head,'name','description','merchant','reference','counterparty'),iNotes=idx(head,'notes and #tags','notes','note'),iType=idx(head,'type');
     const seen=new Set(store.tx.map(t=>t.key)),existing=new Map(),occurrences=new Map();let added=0,skipped=0;
     for(const t of store.tx){const sig=signature(t);existing.set(sig,(existing.get(sig)||0)+1);}
     for(const row of rows.slice(1)){
+      if(iCurrency>=0&&String(row[iCurrency]||'').trim()&&String(row[iCurrency]).trim().toUpperCase()!=='GBP')throw new Error('이 지출 탭은 GBP 계좌 기준입니다. 다른 통화의 CSV는 합칠 수 없습니다.');
       const date=parseDate(row[iDate]);let amount=toNum(row[iAmt]);
       if(!Number.isFinite(amount)){
         const out=toNum(row[iOut]),input=toNum(row[iIn]);
@@ -84,5 +86,11 @@
     store.tx.sort((a,b)=>b.date.localeCompare(a.date));return {store:normalize(store),added,skipped};
   }
   function prevMonth(m){const[y,month]=m.split('-').map(Number);return `${month===1?y-1:y}-${String(month===1?12:month-1).padStart(2,'0')}`;}
-  return {empty,normalize,parseCSV,parseDate,toNum,idx,mergeCSV,prevMonth};
+  function formatDual(value,rate,order='GBP',signed=false){
+    const sign=signed?(value<0?'-':'+'):'';
+    const gbp=sign+'£'+Math.abs(value).toLocaleString('ko-KR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const krw=typeof rate==='number'&&Number.isFinite(rate)&&rate>0?sign+Math.abs(value*rate).toLocaleString('ko-KR',{maximumFractionDigits:0})+'원':'환율 확인 필요';
+    return order==='KRW'?krw+' · '+gbp:gbp+' · '+(krw==='환율 확인 필요'?krw:'약 '+krw);
+  }
+  return {empty,normalize,parseCSV,parseDate,toNum,idx,mergeCSV,prevMonth,formatDual};
 });

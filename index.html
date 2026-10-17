@@ -113,7 +113,7 @@
       <section aria-label="지출 관리">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;"><h2 style="font-size:20px;font-weight:800;margin:0;">지출 관리</h2><a href="https://yjyj41.github.io/spending-tracker/" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:#6B7684;">기존 지출 트래커 열기 ↗</a></div>
         <div style="font-size:12px;line-height:1.8;color:#6B7684;margin-bottom:15px;">같은 브라우저에서 기존 지출 트래커를 사용했다면 거래·예산·저축 목표가 그대로 표시됩니다. 다른 브라우저에서는 기존 사이트의 백업(JSON)을 내려받아 아래 ‘복원’으로 불러오세요.</div>
-        <iframe id="spending-frame" title="지출 관리 · CSV 분석과 예산" src="./spending.html?v=20261017" style="display:block;width:100%;height: {{ spendingFrameHeight }};border:0;"></iframe>
+        <iframe id="spending-frame" title="지출 관리 · CSV 분석과 예산" src="./spending.html?v=20261017-fx" style="display:block;width:100%;height: {{ spendingFrameHeight }};border:0;"></iframe>
       </section>
     </sc-if>
     <sc-if value="{{ isLoans }}">
@@ -495,9 +495,14 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this._fxRequested = new Set();
+    this._syncFX=()=>{try{const raw=JSON.parse(localStorage.getItem(KEY+'_fx')||'{}');const fxRates=Object.fromEntries(Object.entries(raw||{}).filter(([c,r])=>/^[A-Z]{3}$/.test(c)&&StockPortfolio.validRate(r)));this.setState({fxRates,fxError:''});}catch(e){}};
+    this._onFXStorage=e=>{if(e.key===KEY+'_fx'||e.key===null)this._syncFX();};
+    window.addEventListener('storage',this._onFXStorage);
     this._onSpendingMessage=e=>{
       const frame=document.getElementById('spending-frame');
-      if(!frame||e.origin!==window.location.origin||e.source!==frame.contentWindow||!e.data||e.data.type!=='suiknote-spending-size')return;
+      if(!frame||e.origin!==window.location.origin||e.source!==frame.contentWindow||!e.data)return;
+      if(e.data.type==='suiknote-spending-fx'){this._syncFX();return;}
+      if(e.data.type!=='suiknote-spending-size')return;
       const height=Number(e.data.height),count=Number(e.data.count);
       if(!Number.isFinite(height)||height<0||!Number.isSafeInteger(count)||count<0)return;
       const bounded=Math.max(600,Math.min(100000,Math.ceil(height)));
@@ -541,7 +546,7 @@ class Component extends DCLogic {
     this.bindDrop();
   }
 
-  componentWillUnmount() { if(this._onSpendingMessage)window.removeEventListener('message',this._onSpendingMessage); if(this._loanClock)clearInterval(this._loanClock); if (this._onResize) window.removeEventListener('resize', this._onResize); }
+  componentWillUnmount() { if(this._onFXStorage)window.removeEventListener('storage',this._onFXStorage); if(this._onSpendingMessage)window.removeEventListener('message',this._onSpendingMessage); if(this._loanClock)clearInterval(this._loanClock); if (this._onResize) window.removeEventListener('resize', this._onResize); }
 
   componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); this.ensureFX(); }
 
@@ -666,9 +671,11 @@ class Component extends DCLogic {
     const currencies = onlyCurrencies || this.foreignCurrencies();
     if (!currencies.length) { this.setState({ fxError: '외화 거래 파일을 먼저 불러오세요.' }); return; }
     currencies.forEach(c => this._fxRequested.add(c));
+    const requestedRates={...this.state.fxRates};
     this.setState({ fxBusy: true, fxError: '' });
     const result = await StockPortfolio.fetchRates(currencies, (url, options) => fetch(url, options));
-    const fxRates = { ...this.state.fxRates, ...result.rates };
+    const applicable=Object.fromEntries(Object.entries(result.rates).filter(([c])=>JSON.stringify(this.state.fxRates[c])===JSON.stringify(requestedRates[c])));
+    const fxRates = { ...this.state.fxRates, ...applicable };
     this.setState({ fxRates, fxBusy: false, fxDrafts: {}, fxError: result.errors.length ? result.errors.join(', ') + ' 환율을 불러오지 못했습니다. 저장된 기준일을 확인하거나 환율을 직접 입력하세요.' : '' });
     try { localStorage.setItem(KEY + '_fx', JSON.stringify(fxRates)); } catch (e) {}
   }

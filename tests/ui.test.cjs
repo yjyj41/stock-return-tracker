@@ -5,10 +5,10 @@ const vm = require('node:vm');
 const imports = require('../importers.js');
 const portfolio = require('../portfolio.js');
 const loans = require('../loans.js');
-function app() {
+function app(portfolioApi=portfolio) {
   const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
   const script = html.split('<script type="text/x-dc" data-dc-script>')[1].split('</script>')[0];
-  const context = { DCLogic:class {}, StockImports:imports, StockPortfolio:portfolio, StockLoans:loans, window:{}, localStorage:{}, setTimeout, clearTimeout };
+  const context = { DCLogic:class {}, StockImports:imports, StockPortfolio:portfolioApi, StockLoans:loans, window:{}, localStorage:{}, setTimeout, clearTimeout };
   vm.createContext(context); vm.runInContext(script + '\nthis.App = Component;', context);
   const component = new context.App(); component.scheduleDraw = () => {};
   return component;
@@ -74,4 +74,15 @@ test('spending is a separate persistent top-level tab without stock upload or lo
     assert.equal(v.isList,false);assert.equal(v.isCal,false);assert.equal(v.isAdd,false);assert.equal(v.stats.countLabel,'지출 42건');
     assert.equal(v.accountTabs.find(t=>t.key==='spending').active,true);
   }
+});
+
+test('an in-flight stock FX request cannot overwrite a newer rate applied in spending',async()=>{
+  let finish;
+  const c=app({...portfolio,fetchRates:()=>new Promise(resolve=>{finish=resolve;})});
+  c._fxRequested=new Set();c.setState=next=>Object.assign(c.state,next);
+  c.state.fxRates={GBP:{rate:1800,date:'2026-10-17',source:'Frankfurter'}};
+  const pending=c.refreshFX(['GBP']);
+  c.state.fxRates.GBP={rate:1900,date:'2026-10-17',source:'수동입력'};
+  finish({rates:{GBP:{rate:1780,date:'2026-10-17',source:'Frankfurter'}},errors:[]});await pending;
+  assert.equal(c.state.fxRates.GBP.rate,1900);assert.equal(c.state.fxBusy,false);
 });
