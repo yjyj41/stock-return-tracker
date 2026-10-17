@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수익노트 · 지출 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="./spending-core.js?v=20261017"></script>
+<style>
+  :root{
+    --bg:#F2F4F6; --panel:#fff; --panel2:#F2F4F6; --line:#E5E8EB;
+    --text:#191F28; --muted:#6B7684; --accent:#3182F6; --accent2:#129974;
+    --danger:#F04452; --warn:#F59E0B; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;}
+  header{padding:10px 0 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{display:none}
+  header .sub{color:var(--muted);font-size:13px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 0 20px}
+  .grid{display:grid;gap:16px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card .label{color:var(--muted);font-size:13px;margin-bottom:8px}
+  .card .value{font-size:26px;font-weight:700;letter-spacing:-.5px}
+  .card .delta{font-size:13px;margin-top:6px}
+  .up{color:var(--danger)} .down{color:var(--accent2)} .flat{color:var(--muted)}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .charts{grid-template-columns:1fr 1fr}
+  @media(max-width:840px){.charts{grid-template-columns:1fr}}
+  .chart-box{position:relative;height:300px}
+  h2{font-size:15px;margin:0 0 14px;font-weight:600}
+  /* dropzone */
+  #drop{border:2px dashed var(--line);border-radius:var(--radius);padding:34px;text-align:center;
+    cursor:pointer;transition:.15s;background:var(--panel)}
+  #drop.over{border-color:var(--accent);background:var(--panel2)}
+  #drop .big{font-size:16px;font-weight:600;margin-bottom:6px}
+  #drop .small{color:var(--muted);font-size:13px}
+  select,input,button{font:inherit;color:var(--text);max-width:100%}
+  input:not([type=file]){background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  button:disabled{opacity:.45;cursor:default}
+  button:focus-visible,#drop:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  select,input[type=number]{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  button{background:var(--accent);border:none;border-radius:9px;padding:9px 14px;color:#fff;cursor:pointer;font-weight:600}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  button.danger{background:transparent;border:1px solid var(--danger);color:var(--danger)}
+  button:hover{filter:brightness(1.08)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel)}
+  td.amt{text-align:right;font-variant-numeric:tabular-nums}
+  .tbl-scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;background:var(--panel2);font-size:12px;color:var(--muted)}
+  .budget-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center;margin-bottom:10px}
+  .bar{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;border-radius:6px;background:var(--accent2)}
+  .bar > i.over{background:var(--danger)}
+  .muted{color:var(--muted)}
+  .pill{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--panel2);color:var(--muted);cursor:pointer;border:1px solid transparent}
+  .pill.active{background:var(--accent);color:#fff}
+  .hidden{display:none}
+  #importStatus:empty,#storageNotice:empty,#chartNotice:empty{display:none}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  .spacer{flex:1}
+  .empty{text-align:center;color:var(--muted);padding:40px}
+  a{color:var(--accent)}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);
+    border:1px solid var(--line);padding:11px 18px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>💷 지출 트래커</h1>
+  <span class="sub">Monzo CSV · 월별 지출 · 예산 · 구독 · 저축 목표</span>
+  <div class="spacer"></div>
+  <div class="row" style="gap:8px">
+    <label class="muted" style="font-size:13px">통화</label>
+    <select id="currency" aria-label="지출 표시 통화">
+      <option value="£">£ GBP</option>
+      <option value="₩">₩ KRW</option>
+      <option value="$">$ USD</option>
+      <option value="€">€ EUR</option>
+    </select>
+  </div>
+</header>
+
+<div class="wrap grid" style="gap:22px">
+
+  <!-- Upload -->
+  <div id="drop" role="button" tabindex="0" aria-label="지출 CSV 파일 불러오기">
+    <div class="big">CSV 파일을 여기에 드래그하거나 클릭해서 선택</div>
+    <div class="small">Monzo 거래내역 CSV 지원 · 여러 달 파일을 반복해서 올리면 자동으로 누적됩니다 (중복 제거)</div>
+    <input id="file" aria-label="지출 CSV 파일" type="file" accept=".csv,text/csv" multiple class="hidden">
+  </div>
+
+  <div id="importStatus" role="status" aria-live="polite" class="muted" style="font-size:13px;line-height:1.7;"></div>
+  <div id="storageNotice" role="alert" style="color:var(--danger);font-size:13px;"></div>
+  <div class="muted" style="font-size:12px;line-height:1.7;">지출 기록은 현재 브라우저에 저장됩니다. 통화 선택은 표시 단위이며 환율로 자동 환산하지 않습니다.</div>
+  <!-- Controls -->
+  <div class="flex-between" id="controls">
+    <div class="row">
+      <label class="muted" style="font-size:13px">분석 월</label>
+      <select id="month" aria-label="지출 분석 월"></select>
+    </div>
+    <div class="row">
+      <button class="ghost" id="exportBtn">⬇ 백업(JSON)</button>
+      <input id="importFile" aria-label="지출 백업 JSON 파일" type="file" accept=".json" class="hidden">
+      <button class="ghost" id="importBtn">⬆ 복원</button>
+      <button class="danger" id="clearBtn">전체 삭제</button>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="grid cards" id="cards"></div>
+
+  <div id="chartNotice" role="status" class="muted" style="font-size:12px;"></div>
+  <!-- Charts -->
+  <div class="grid charts" id="chartsArea">
+    <div class="panel">
+      <h2>이번 달 vs 지난 달 (총지출)</h2>
+      <div class="chart-box"><canvas id="cmpChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>카테고리 분석</h2>
+      <div class="chart-box"><canvas id="catChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>월별 지출 추세</h2>
+      <div class="chart-box"><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>목표 대비 지출</h2>
+      <div id="budgetArea"></div>
+    </div>
+  </div>
+
+  <!-- Budget settings -->
+  <div class="panel">
+    <div class="flex-between">
+      <h2 style="margin:0">예산 목표 설정</h2>
+      <span class="muted" style="font-size:13px">월 기준 · 비워두면 미설정</span>
+    </div>
+    <div class="row" style="margin:14px 0">
+      <label style="font-size:14px">월 전체 목표</label>
+      <input type="number" id="totalBudget" aria-label="월 전체 지출 예산" placeholder="예: 1500" style="width:140px">
+      <button id="saveBudget">저장</button>
+    </div>
+    <div id="catBudgets"></div>
+  </div>
+
+  <!-- Smart insights (Snoops) -->
+  <div class="panel" id="insightsPanel">
+    <div class="flex-between" style="margin-bottom:6px">
+      <h2 style="margin:0">💡 스마트 인사이트</h2>
+      <span class="muted" style="font-size:13px">선택한 달 기준 자동 분석</span>
+    </div>
+    <div id="insights" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:12px"></div>
+  </div>
+
+  <!-- Subscriptions -->
+  <div class="panel" id="subscriptionsPanel">
+    <div class="flex-between" style="margin-bottom:6px">
+      <h2 style="margin:0">🔁 구독 & 정기결제</h2>
+      <span class="muted" style="font-size:13px" id="subTotal"></span>
+    </div>
+    <div id="subList" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Savings goals -->
+  <div class="panel">
+    <div class="flex-between" style="margin-bottom:6px">
+      <h2 style="margin:0">🎯 저축 목표</h2>
+      <span class="muted" style="font-size:13px" id="netHint"></span>
+    </div>
+    <div id="goalList" style="margin:12px 0"></div>
+    <div class="row">
+      <input id="goalName" aria-label="저축 목표 이름" placeholder="목표 이름 (예: 여행 자금)" style="width:200px">
+      <input id="goalTarget" aria-label="저축 목표 금액" type="number" placeholder="목표 금액" style="width:130px">
+      <button id="addGoal">목표 추가</button>
+    </div>
+  </div>
+
+  <!-- Transactions -->
+  <div class="panel" id="transactionsPanel">
+    <div class="flex-between" style="margin-bottom:12px">
+      <h2 style="margin:0">거래 내역 <span class="muted" id="txCount"></span></h2>
+      <input id="search" aria-label="지출 거래 검색" placeholder="검색 (상점·메모·카테고리)" style="width:240px">
+    </div>
+    <div class="tbl-scroll" tabindex="0" aria-label="지출 거래 목록">
+      <table>
+        <thead><tr><th>날짜</th><th>상점/내용</th><th>카테고리</th><th class="amt">금액</th></tr></thead>
+        <tbody id="txBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="./spending.js?v=20261017"></script>
+</body>
+</html>
+

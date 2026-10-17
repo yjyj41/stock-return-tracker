@@ -65,3 +65,13 @@ test('upcoming due cards expose dates and missing bill amounts while auto projec
   assert.equal(v.loanDashboard.recorded,'0원');assert.equal(c.state.loans[0].events.length,0);
   c.state.loanAutoAssume=false;v=c.renderVals();assert.match(v.loanAssumptionNote,/꺼져/);assert.match(v.loanBalanceTitle,/입력 기록/);
 });
+
+test('spending is a separate persistent top-level tab without stock upload or loan panels',()=>{
+  const c=app();c.state.accountScope='spending';c.state.spendingCount=42;
+  for(const tab of ['list','cal','add']){
+    c.state.tab=tab;const v=c.renderVals();
+    assert.equal(v.isSpending,true);assert.equal(v.isLoans,false);assert.equal(v.isAccount,false);assert.equal(v.showStockTabs,false);
+    assert.equal(v.isList,false);assert.equal(v.isCal,false);assert.equal(v.isAdd,false);assert.equal(v.stats.countLabel,'지출 42건');
+    assert.equal(v.accountTabs.find(t=>t.key==='spending').active,true);
+  }
+});

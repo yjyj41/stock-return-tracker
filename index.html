@@ -69,7 +69,7 @@
         <div style="width:42px;height:42px;border-radius:13px;background:#191F28;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;letter-spacing:-0.04em;">수</div>
         <div>
           <div style="font-size:19px;font-weight:800;letter-spacing:-0.03em;">수익노트</div>
-          <div style="font-size:12.5px;color:#8B95A1;margin-top:1px;">주식 손익 · 대출과 이자 관리</div>
+          <div style="font-size:12.5px;color:#8B95A1;margin-top:1px;">주식 손익 · 대출 · 지출 관리</div>
         </div>
       </div>
       <div style="font-size:13px;color:#8B95A1;font-weight:600;background:#fff;padding:8px 14px;border-radius:10px;">{{ stats.countLabel }}</div>
@@ -108,6 +108,13 @@
       <div style="font-size:12px;line-height:1.8;color:#6B7684;">{{ loanAdjusted.detail }}<br>주식 손익과 기록한 대출 이자에 같은 조회기간을 적용합니다. 예상 이자는 차감하지 않습니다. 은행의 모든 납부 이자를 기록했는지 확인해 주세요.</div>
       <button class="loan-button" onClick="{{ onOpenLoans }}" style="margin-top:12px;">대출 내역 · 조회기간 관리</button>
     </section>
+    </sc-if>
+    <sc-if value="{{ isSpending }}">
+      <section aria-label="지출 관리">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;"><h2 style="font-size:20px;font-weight:800;margin:0;">지출 관리</h2><a href="https://yjyj41.github.io/spending-tracker/" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:#6B7684;">기존 지출 트래커 열기 ↗</a></div>
+        <div style="font-size:12px;line-height:1.8;color:#6B7684;margin-bottom:15px;">같은 브라우저에서 기존 지출 트래커를 사용했다면 거래·예산·저축 목표가 그대로 표시됩니다. 다른 브라우저에서는 기존 사이트의 백업(JSON)을 내려받아 아래 ‘복원’으로 불러오세요.</div>
+        <iframe id="spending-frame" title="지출 관리 · CSV 분석과 예산" src="./spending.html?v=20261017" style="display:block;width:100%;height: {{ spendingFrameHeight }};border:0;"></iframe>
+      </section>
     </sc-if>
     <sc-if value="{{ isLoans }}">
     <section aria-label="대출 관리">
@@ -471,7 +478,7 @@ class Component extends DCLogic {
     selectedView: 'samsung-summary:KRW', accountScope: 'domestic',
     importNotes: {},
     profitBasis: 'net', fxRates: {}, fxDrafts: {}, fxBusy: false, fxError: '',
-    loanAutoAssume:true, loanClockTick:'', loans: [], selectedLoanId:'', loanFormOpen:false, loanForm:blankLoan(), loanEvent:blankLoanEvent(),
+    spendingFrameHeight:1200, spendingCount:null, loanAutoAssume:true, loanClockTick:'', loans: [], selectedLoanId:'', loanFormOpen:false, loanForm:blankLoan(), loanEvent:blankLoanEvent(),
     loanFrom:loanToday().slice(0,4)+'-01-01', loanTo:loanToday(), loanMessage:'', loanMessageOk:true, loanUndo:null,
     tab: 'list',
     expandedId: null,
@@ -488,10 +495,19 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this._fxRequested = new Set();
+    this._onSpendingMessage=e=>{
+      const frame=document.getElementById('spending-frame');
+      if(!frame||e.origin!==window.location.origin||e.source!==frame.contentWindow||!e.data||e.data.type!=='suiknote-spending-size')return;
+      const height=Number(e.data.height),count=Number(e.data.count);
+      if(!Number.isFinite(height)||height<0||!Number.isSafeInteger(count)||count<0)return;
+      const bounded=Math.max(600,Math.min(100000,Math.ceil(height)));
+      if(this.state.spendingFrameHeight!==bounded||this.state.spendingCount!==count)this.setState({spendingFrameHeight:bounded,spendingCount:count});
+    };
+    window.addEventListener('message',this._onSpendingMessage);
     this._loanDate=loanToday();
     this._loanClock=setInterval(()=>{const now=loanToday();if(now!==this._loanDate){this._loanDate=now;this.setState({loanClockTick:now});}},60000);
     try {this.setState({loanAutoAssume:localStorage.getItem(KEY+'_loan_assume')!=='false'});} catch(e) {}
-    try { const saved=localStorage.getItem(KEY+'_account');if(['domestic','overseas','combined','loans'].includes(saved))this.setState({accountScope:saved}); } catch(e) {}
+    try { const saved=localStorage.getItem(KEY+'_account');if(['domestic','overseas','combined','loans','spending'].includes(saved))this.setState({accountScope:saved}); } catch(e) {}
     try {
       const raw = localStorage.getItem(KEY + '_loans');
       if (raw) { const loans=StockLoans.readBackup(JSON.parse(raw)); this.setState({loans,selectedLoanId:loans[0]?loans[0].id:''}); }
@@ -512,7 +528,7 @@ class Component extends DCLogic {
       if (raw) { const t = JSON.parse(raw); if (Array.isArray(t)) {
         const storedView = localStorage.getItem(KEY + '_view');
         const storedAccount = localStorage.getItem(KEY + '_account');
-        const accountScope = ['domestic', 'overseas', 'combined', 'loans'].includes(storedAccount) ? storedAccount : 'domestic';
+        const accountScope = ['domestic', 'overseas', 'combined', 'loans', 'spending'].includes(storedAccount) ? storedAccount : 'domestic';
         const selectedView = StockPortfolio.preferredView(t, accountScope, localStorage.getItem(KEY + '_details_version') === '2' ? storedView : undefined);
         localStorage.setItem(KEY + '_details_version', '2');
         let importNotes = {}; try { importNotes = JSON.parse(localStorage.getItem(KEY + '_notes') || '{}'); } catch (e) {}
@@ -525,7 +541,7 @@ class Component extends DCLogic {
     this.bindDrop();
   }
 
-  componentWillUnmount() { if(this._loanClock)clearInterval(this._loanClock); if (this._onResize) window.removeEventListener('resize', this._onResize); }
+  componentWillUnmount() { if(this._onSpendingMessage)window.removeEventListener('message',this._onSpendingMessage); if(this._loanClock)clearInterval(this._loanClock); if (this._onResize) window.removeEventListener('resize', this._onResize); }
 
   componentDidUpdate() { this.scheduleDraw(); this.bindDrop(); this.ensureFX(); }
 
@@ -1032,7 +1048,7 @@ class Component extends DCLogic {
     this.scheduleDraw();
     const st = this.state;
     const portfolio = StockPortfolio.combined(st.trades, 'net', st.fxRates);
-    const isDomestic = st.accountScope === 'domestic', isCombined = st.accountScope === 'combined', isLoans=st.accountScope === 'loans';
+    const isDomestic = st.accountScope === 'domestic', isCombined = st.accountScope === 'combined', isLoans=st.accountScope === 'loans', isSpending=st.accountScope === 'spending';
     const signedMoney = (n, currency) => (n >= 0 ? '+' : '') + money(n, currency);
     const combinedNote = ['불러온 파일 전체 기간의 실현손익을 합산합니다.', '계좌별 기간은 아래에 표시합니다.'];
     if (portfolio.excludedLedger) combinedNote.push('삼성 거래내역의 비용 전 추정치는 합산에서 제외합니다.');
@@ -1053,7 +1069,7 @@ class Component extends DCLogic {
     const avgRet = dashboardCount ? dashboard.reduce((a, t) => a + t.ret, 0) / dashboardCount : 0;
     const avgHold = dashboardCount ? Math.round(dashboard.reduce((a, t) => a + t.hold, 0) / dashboardCount) : 0;
     const stats = {
-      countLabel: isLoans ? st.loans.length+'개 대출' : isCombined ? portfolio.rows.length + '개 계좌' : '총 ' + count + '건',
+      countLabel: isSpending ? (st.spendingCount==null?'지출 관리':'지출 '+st.spendingCount+'건') : isLoans ? st.loans.length+'개 대출' : isCombined ? portfolio.rows.length + '개 계좌' : '총 ' + count + '건',
       totalPnlLabel: (totalPnl >= 0 ? '+' : '') + money(totalPnl, st.selectedView.split(':')[1]),
       pnlColor: totalPnl >= 0 ? RED : BLUE,
       cumRetLabel: st.selectedView.startsWith('trading212-cfd:') ? '(증거금 수익률 미계산)' : hasUnknownCost ? '(매입원가 미확인)' : '(' + (cumRet >= 0 ? '+' : '') + (cumRet * 100).toFixed(1) + '%)',
@@ -1093,9 +1109,9 @@ class Component extends DCLogic {
     };
     return {
       ...this.renderLoanVals(),
-      isLoans, isCombined, isAccount: !isCombined && !isLoans, isOverseas: st.accountScope === 'overseas', showStockTabs:!isLoans,
+      isSpending, spendingFrameHeight:st.spendingFrameHeight+'px', isLoans, isCombined, isAccount: !isCombined && !isLoans && !isSpending, isOverseas: st.accountScope === 'overseas', showStockTabs:!isLoans && !isSpending,
       accountTitle: isDomestic ? '국내주식 · 삼성증권' : '해외주식 · Trading 212',
-      accountTabs: [{key:'domestic',label:'국내 · 삼성증권'},{key:'overseas',label:'해외 · Trading 212'},{key:'combined',label:'전체 합산'},{key:'loans',label:'대출 관리'}].map(a => ({...a, active:st.accountScope === a.key, bg:st.accountScope === a.key ? '#191F28' : '#fff', color:st.accountScope === a.key ? '#fff' : '#4E5968', onClick:() => this.selectAccount(a.key)})),
+      accountTabs: [{key:'domestic',label:'국내 · 삼성증권'},{key:'overseas',label:'해외 · Trading 212'},{key:'combined',label:'전체 합산'},{key:'loans',label:'대출 관리'},{key:'spending',label:'지출 관리'}].map(a => ({...a, active:st.accountScope === a.key, bg:st.accountScope === a.key ? '#191F28' : '#fff', color:st.accountScope === a.key ? '#fff' : '#4E5968', onClick:() => this.selectAccount(a.key)})),
       uploadHelp: isDomestic ? '종목별 매수·매도·차트는 거래내역 XLSX, 전체 순수익은 순손익 열이 있는 손익표 XLSX를 불러오세요. 두 파일을 함께 사용할 수 있습니다.' : 'Trading 212 ISA/Invest 또는 CFD CSV를 불러오세요. ISA는 최초 매수부터 전체 내역이 필요합니다. ISA와 CFD는 별도 계좌로 표시합니다.',
       emptyTitle: isDomestic ? '삼성증권 파일을 불러와 주세요' : 'Trading 212 거래내역을 불러와 주세요',
       emptyHelp: isDomestic ? '거래내역 파일에는 종목별 매매 내역과 차트가, 손익표에는 전체 순수익이 표시됩니다.' : '파일 불러오기에서 ISA/Invest 또는 CFD CSV를 선택하세요. 국내주식 기록은 국내 · 삼성증권 화면에서 확인할 수 있습니다.',
@@ -1124,7 +1140,7 @@ class Component extends DCLogic {
       pnlTitle: isDomestic ? '삼성증권 순수익 · 손익표의 비용 차감 후 순손익' : st.profitBasis === 'reported' && st.selectedView.startsWith('trading212') ? (st.selectedView.startsWith('trading212-cfd:') ? 'CFD 보고손익 · FX 수수료 차감 후 · 이자 제외' : 'ISA/Invest 보고손익 · CSV Result 기준') : st.selectedView.startsWith('samsung-summary:') ? '증권사 순손익 · 수수료·세금 차감 후' : st.selectedView.startsWith('samsung-ledger:') ? '실현 매매손익 추정 · 비용 차감 전' : st.selectedView.startsWith('trading212-cfd:') ? 'CFD 청산손익 · Total result 기준' : st.selectedView.startsWith('trading212:') ? (enriched.some(t => t.reportedOnly) ? 'ISA/Invest 실현손익 · 비용 기준 확인' : 'ISA/Invest 실현손익 · 비용 포함 Total 기준') : '실현 매매손익 · 비용 차감 전',
       basisDescription: (isDomestic ? '전체 순수익에는 손익표의 수수료·세금이 반영됩니다. 별도 신용이자·배당·입출금은 제외합니다. 거래내역은 일반 현금거래의 입출금액 차이로 비용을 계산하며, 융자 등 비용 미확인 거래는 추정으로 표시합니다. 이전 저장 기록에 비용 표시가 없으면 거래내역 파일을 다시 불러오세요. 최근 종가 기준 평가손익은 가상 매도비용을 제외한 참고 값입니다.\n' : '') + (st.importNotes[st.selectedView.split(':')[0]] || 'ISA/Invest는 매수·매도 Total, CFD는 청산 Total result를 사용합니다. 이미 포함된 비용을 다시 차감하지 않습니다.'),
       stats, hasData: enriched.length > 0, clearDisabled: isCombined || !count, tabList,
-      isList: !isCombined && !isLoans && st.tab === 'list', isCal: !isCombined && !isLoans && st.tab === 'cal', isAdd: !isLoans && st.tab === 'add',
+      isList: !isCombined && !isLoans && !isSpending && st.tab === 'list', isCal: !isCombined && !isLoans && !isSpending && st.tab === 'cal', isAdd: !isLoans && !isSpending && st.tab === 'add',
       chips, visibleTrades, hasTrades: count > 0 && visibleTrades.length > 0, noTrades: visibleTrades.length === 0,
       cal, onPrevMonth: () => this.shiftMonth(-1), onNextMonth: () => this.shiftMonth(1),
       form: st.form, set, formError: st.formError, onAdd: () => this.addTrade(),
