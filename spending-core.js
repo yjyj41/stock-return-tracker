@@ -1,8 +1,8 @@
 /* Compatible with yjyj41/spending-tracker's spend_tracker_v1 backup and storage. */
-(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.SpendingCore=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
+(function(root,factory){const api=factory(typeof module==='object'&&module.exports?require('./spending-analysis.js'):root.SpendingAnalysis);if(typeof module==='object'&&module.exports)module.exports=api;else root.SpendingCore=api;})(typeof globalThis!=='undefined'?globalThis:this,function(analysis){
   'use strict';
   const symbols=['£','₩','$','€'];
-  function empty(){return {tx:[],budgets:Object.create(null),totalBudget:null,currency:'£',goals:[]};}
+  function empty(){return {tx:[],budgets:Object.create(null),totalBudget:null,currency:'£',goals:[],management:analysis.normalize()};}
   function validDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s||''))return false;
     const d=new Date(s+'T00:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===s;
@@ -58,6 +58,7 @@
     out.totalBudget=raw.totalBudget==null||raw.totalBudget===0?null:positive(raw.totalBudget,'월 예산',false);
     if(raw.goals!=null&&!Array.isArray(raw.goals))throw new Error('저축 목표 형식을 확인하세요.');
     out.goals=(raw.goals||[]).map(g=>({name:text(g.name,'목표 이름',300),target:positive(g.target,'목표',false),current:positive(g.current==null?0:g.current,'저축액',true)}));
+    out.management=analysis.normalize(raw.management);
     return out;
   }
   const signature=t=>JSON.stringify([t.date,t.amount,t.name,t.category,t.type]);

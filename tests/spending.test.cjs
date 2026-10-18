@@ -45,7 +45,7 @@ function embeddedApp(raw,rate){
   if(rate)saved.set('suiknote_v1_fx',JSON.stringify({GBP:rate}));
   function el(id){if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',style:{},listeners:{},classList:{add(){},remove(){}},addEventListener(name,cb){this.listeners[name]=cb;},getBoundingClientRect(){return {height:1000};}});return elements.get(id);}
   const window={addEventListener(){}};window.parent=window;
-  const context={SpendingCore:api,StockPortfolio:require('../portfolio.js'),window,document:{getElementById:el,querySelectorAll:()=>[],body:{getBoundingClientRect:()=>({height:1000})}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},requestAnimationFrame:fn=>fn(),setTimeout:()=>0,clearTimeout(){},console};
+  const context={SpendingAnalysis:require('../spending-analysis.js'),SpendingCore:api,StockPortfolio:require('../portfolio.js'),window,document:{getElementById:el,querySelectorAll:()=>[],body:{getBoundingClientRect:()=>({height:1000})}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},requestAnimationFrame:fn=>fn(),setTimeout:()=>0,clearTimeout(){},console};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../spending.js'),'utf8'),context);
   return {elements,saved};
 }
