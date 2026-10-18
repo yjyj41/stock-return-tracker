@@ -183,13 +183,14 @@ function fillFixed(p={}){
 }
 function renderSubscriptions(){
   const month=el('month').value||today().slice(0,7),plans=analysis.planRows(store,month,today());
-  el('subTotal').textContent=`월 예정 ${fmt(plans.reduce((s,p)=>s+p.amount,0))} · ${plans.length}개`;
+  el('subTotal').textContent=plans.length?`등록한 월 예정액 ${fmt(plans.reduce((s,p)=>s+p.amount,0))} · ${plans.length}개`:'납부 일정 미등록';
   el('subList').innerHTML=plans.map(p=>`<div class="plan-item"><div class="flex-between"><b>${esc(p.name)}</b><span class="tag">${p.due} ${p.days===0?'· 오늘':p.days>0&&p.days<=7?'· '+p.days+'일 후':''}</span></div><div style="line-height:1.9;margin-top:8px">예정 ${fmt(p.amount)}<br>실제 출금 ${fmt(p.actual)} · ${p.status}<br><span class="muted">예정 대비 남은 금액 ${fmt(p.remaining)}${p.dates.length?' · 출금일 '+p.dates.join(', '):''}</span></div><div class="small-actions"><button class="ghost editFixed" data-id="${esc(p.id)}">수정</button><button class="ghost deleteFixed" data-id="${esc(p.id)}">삭제</button></div></div>`).join('')||'<div class="empty">이 달에 등록된 고정지출이 없습니다. 월세·정기결제를 등록하세요.</div>';
   // Plans outside the selected month remain editable, including ended contracts.
   const outside=store.management.fixed.filter(p=>!plans.some(r=>r.id===p.id));
   if(outside.length)el('subList').innerHTML+=`<details><summary>다른 기간의 등록 항목 ${outside.length}개</summary>${outside.map(p=>`<div class="plan-item">${esc(p.name)} · ${p.start} ~ ${p.end||'계속'} <button class="ghost editFixed" data-id="${esc(p.id)}">수정</button><button class="ghost deleteFixed" data-id="${esc(p.id)}">삭제</button></div>`).join('')}</details>`;
   const candidates=analysis.suggestions(store),unplanned=new Map();
   for(const t of store.tx){const c=classification(t),who=normMerchant(t.name);if(c.kind==='fixed'&&!c.planId&&!store.management.dismissed.includes(who)&&(!unplanned.has(who)||unplanned.get(who).date<t.date))unplanned.set(who,t);}
+  if(!plans.length&&unplanned.size)el('subList').innerHTML='';
   for(const [who,t]of unplanned){
     const name=store.management.rules.find(r=>r.merchant===who&&r.direction==='out')?.label||t.name;
     const matched=store.tx.filter(x=>ym(x.date)===month&&normMerchant(x.name)===who&&classification(x).kind==='fixed');
