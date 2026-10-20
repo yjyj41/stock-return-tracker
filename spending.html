@@ -6,8 +6,8 @@
 <title>수익노트 · 지출 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="./portfolio.js?v=20261017-fx"></script>
-<script src="./spending-analysis.js?v=20261019"></script>
-<script src="./spending-core.js?v=20261019"></script>
+<script src="./spending-analysis.js?v=20261021"></script>
+<script src="./spending-core.js?v=20261021"></script>
 <style>
   :root{
     --bg:#F2F4F6; --panel:#fff; --panel2:#F2F4F6; --line:#E5E8EB;
@@ -25,6 +25,10 @@
   .grid>*{min-width:0}
   .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card{display:flex;flex-direction:column;gap:8px}
+  .card .hint{font-size:13px;line-height:1.7;color:var(--muted)}
+  .card .small-actions{margin-top:auto;padding-top:8px}
+  .card .breakdown{border-top:1px solid var(--line);padding-top:10px;font-size:12px;line-height:1.9}
   .card .label{color:var(--muted);font-size:13px;margin-bottom:8px}
   .card .value{font-size:26px;font-weight:700;letter-spacing:-.5px}
   .card .delta{font-size:13px;margin-top:6px}
@@ -102,47 +106,32 @@
 
 <div class="wrap grid" style="gap:22px">
 
-  <!-- Upload -->
-  <div id="drop" role="button" tabindex="0" aria-label="지출 CSV 파일 불러오기">
-    <div class="big">CSV 파일을 여기에 드래그하거나 클릭해서 선택</div>
-    <div class="small">Monzo 거래내역 CSV 지원 · 여러 달 파일을 반복해서 올리면 자동으로 누적됩니다 (중복 제거)</div>
-    <input id="file" aria-label="지출 CSV 파일" type="file" accept=".csv,text/csv" multiple class="hidden">
-  </div>
-
-  <div id="importStatus" role="status" aria-live="polite" class="muted" style="font-size:13px;line-height:1.7;"></div>
-  <div id="storageNotice" role="alert" style="color:var(--danger);font-size:13px;"></div>
-  <div class="panel" style="padding:14px;">
-    <div style="font-size:13px;font-weight:600;">파운드 · 원화 함께 보기</div>
-    <div id="fxSummary" role="status" style="font-size:13px;line-height:1.8;margin:6px 0;"></div>
-    <div class="row" style="gap:8px;font-size:13px;">
-      <label for="fxRate">1 GBP =</label><input id="fxRate" aria-label="지출 파운드 환율" type="number" min="0.000001" step="any" placeholder="원/파운드" style="width:130px;">원
-      <button id="applyFX">환율 적용</button><button id="refreshFX" class="ghost">최신 환율 조회</button>
-    </div>
-    <div id="fxError" role="alert" style="font-size:12px;color:var(--danger);margin-top:6px;"></div>
-    <div class="muted" style="font-size:12px;line-height:1.7;margin-top:6px;">원본 거래·예산·저축 입력은 GBP 기준입니다. 적용 환율로 원화를 환산하며, 거래일별 환율·실제 환전 수수료는 반영하지 않습니다. 전체 합산과 같은 환율을 사용합니다. 지출 기록은 현재 브라우저에 저장됩니다.</div>
-  </div>
-  <!-- Controls -->
-  <div class="flex-between" id="controls">
-    <div class="row">
-      <label class="muted" style="font-size:13px">분석 월</label>
-      <select id="month" aria-label="지출 분석 월"></select>
-    </div>
-    <div class="row">
-      <button class="ghost" id="exportBtn">⬇ 백업(JSON)</button>
-      <input id="importFile" aria-label="지출 백업 JSON 파일" type="file" accept=".json" class="hidden">
-      <button class="ghost" id="importBtn">⬆ 복원</button>
-      <button class="danger" id="clearBtn">전체 삭제</button>
-    </div>
-  </div>
-
+  <div class="flex-between" id="controls"><div><h2 style="font-size:22px;margin:0 0 6px">이번 달 돈, 이렇게 나눠 보세요</h2><div class="muted" style="font-size:13px">쓴 돈과 번 돈, 계좌 사이에서 옮긴 돈은 서로 달라요.</div></div><label class="row" style="gap:8px">조회 월 <select id="month" aria-label="지출 분석 월"></select></label></div>
+  <div id="dataPeriod" class="muted" style="font-size:12px;line-height:1.7"></div>
   <!-- Summary cards -->
   <div class="grid cards" id="cards"></div>
 
   <div id="reviewBanner" class="notice" role="status"></div>
-  <div class="panel" id="flowPanel"><h2>이체와 실제 소비를 구분한 월별 흐름</h2><div id="flowSummary" class="grid cards"></div><div class="muted" style="font-size:12px;line-height:1.7;margin-top:12px">소비·예산·차트는 계좌이체와 확인 필요 거래를 제외한 출금 기준입니다. 환급은 따로 표시합니다. 계좌 순유입은 모든 입출금을 포함하며 계좌 잔액이나 소득이 아닙니다.</div></div>
+  <!-- Transactions -->
+  <details class="panel" id="transactionsPanel"><summary id="transactionTitle" tabindex="-1">거래 내역 · 금액에 포함된 항목 확인</summary><div style="margin-top:16px">
+    <div class="flex-between" style="margin-bottom:12px">
+      <h2 style="margin:0">거래 내역 <span class="muted" id="txCount"></span></h2>
+      <input id="search" aria-label="지출 거래 검색" placeholder="검색 (상점·메모·카테고리)" style="width:240px">
+    </div>
+    <div class="row" style="gap:8px;margin-bottom:12px"><select id="kindFilter" aria-label="거래 분류 필터"><option value="all">모든 거래</option><option value="spending">소비 전체</option><option value="expense">생활비 · 변동지출</option><option value="fixed">고정지출</option><option value="income">수입</option><option value="transferInConfirmed">옮겨온 돈 · 확인된 이체</option><option value="transferInEstimated">옮겨온 돈 · 추정</option><option value="transferIn">옮겨온 돈 · 추정 포함 전체</option><option value="transferOut">이체 출금</option><option value="refund">환급</option><option value="review">확인 필요</option></select><span id="filteredSum" class="muted" style="font-size:12px"></span></div>
+    <p id="transactionHelp" class="muted" style="font-size:12px;line-height:1.7"></p><div class="tbl-scroll" tabindex="0" aria-label="지출 거래 목록">
+      <table>
+        <thead><tr><th>날짜</th><th id="counterpartyHeading">상대방 / 내용</th><th>카테고리</th><th class="amt">금액</th><th>분류 · 수정</th></tr></thead>
+        <tbody id="txBody"></tbody>
+      </table>
+    </div>
+      <div class="flex-between" style="margin-top:12px"><button id="prevTx" class="ghost">이전 거래</button><span id="txPage" class="muted"></span><button id="nextTx" class="ghost">다음 거래</button></div>
+    <div class="muted" style="font-size:12px;line-height:1.7;margin-top:8px">분류 변경은 즉시 저장됩니다. ‘같은 이름에 적용’은 모든 기간의 같은 상대방·입출금 방향에 적용합니다. 다른 계좌로 보낸 월세는 ‘고정지출’로 지정하세요.</div>
+  </div></details>
+  <details class="panel" id="flowPanel"><summary>전체 입출금 계산 보기</summary><div id="flowSummary" class="grid cards" style="margin-top:16px"></div><p class="muted" style="font-size:12px;line-height:1.7">전체 입금 − 전체 출금은 이 달 계좌에서 늘거나 줄어든 돈입니다. 현재 잔액이나 번 돈과는 다릅니다. 이체 입금은 출금을 차감하지 않은 합계입니다.</p></details>
   <div class="panel" id="subscriptionsPanel">
     <div class="flex-between"><h2 style="margin:0">월세 · 고정지출</h2><span id="subTotal" class="muted" style="font-size:13px"></span></div>
-    <p class="muted" style="font-size:12px;line-height:1.7">등록한 월별 납부일과 금액을 실제 거래와 비교합니다. 거래가 없다고 미납으로 단정하지 않으며 CSV 조회기간도 함께 확인합니다.</p>
+    <p class="muted" style="font-size:12px;line-height:1.7"><b>실제로 빠져나간 월세·고정지출은 위 ‘쓴 돈’에 이미 포함돼요.</b> 아래 예정 금액을 다시 더하지 마세요. 등록한 월별 납부일과 금액을 실제 거래와 비교합니다. 거래가 없다고 미납으로 단정하지 않으며 CSV 조회기간도 함께 확인합니다.</p>
     <div id="subList"></div>
     <details id="fixedForm"><summary>고정지출 등록 · 수정</summary>
       <div class="settings-grid">
@@ -159,30 +148,14 @@
   <details class="panel" id="classificationSettings"><summary>내 계좌 이체 · 급여 분류 설정</summary>
     <p class="muted" style="font-size:12px;line-height:1.7">급여 입금 이름은 CSV의 상대방 이름과 같게 입력하세요. 이름이 여러 개면 줄바꿈으로 구분합니다. 개별 거래 분류와 직접 지정한 규칙이 우선합니다.</p>
     <label style="display:block;font-size:13px">급여 입금 이름<textarea id="salaryNames" aria-label="급여 입금 이름" rows="3" style="width:100%;margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit"></textarea></label>
-    <label style="font-size:13px;line-height:1.8"><input type="checkbox" id="otherIncomeTransfers"> 급여·환급 외 입금은 모두 내 계좌에서 옮긴 돈</label>
+    <label style="font-size:13px;line-height:1.8"><input type="checkbox" id="otherIncomeTransfers"> 급여·환급 외 입금은 내 계좌에서 옮긴 돈으로 추정 (확인 전 별도 표시)</label>
     <div class="small-actions"><button id="saveClassification">분류 설정 저장</button><button id="importSettings" class="ghost">분류 설정 파일 가져오기</button><button id="undoClassification" class="ghost" disabled>마지막 변경 되돌리기</button></div>
     <input type="file" id="settingsFile" accept=".json" class="hidden" aria-label="지출 분류 설정 파일">
     <div id="classificationStatus" role="status" style="font-size:12px;line-height:1.8;margin-top:10px"></div>
     <div id="classificationRules"></div>
   </details>
   <datalist id="merchantNames"></datalist>
-  <!-- Transactions -->
-  <div class="panel" id="transactionsPanel">
-    <div class="flex-between" style="margin-bottom:12px">
-      <h2 style="margin:0">거래 내역 <span class="muted" id="txCount"></span></h2>
-      <input id="search" aria-label="지출 거래 검색" placeholder="검색 (상점·메모·카테고리)" style="width:240px">
-    </div>
-    <div class="row" style="gap:8px;margin-bottom:12px"><select id="kindFilter" aria-label="거래 분류 필터"><option value="all">모든 거래</option><option value="spending">소비 전체</option><option value="expense">생활비 · 변동지출</option><option value="fixed">고정지출</option><option value="income">수입</option><option value="transferIn">이체 입금</option><option value="transferOut">이체 출금</option><option value="refund">환급</option><option value="review">확인 필요</option></select><span id="filteredSum" class="muted" style="font-size:12px"></span></div>
-    <div class="tbl-scroll" tabindex="0" aria-label="지출 거래 목록">
-      <table>
-        <thead><tr><th>날짜</th><th>상점/내용</th><th>카테고리</th><th class="amt">금액</th><th>분류 · 수정</th></tr></thead>
-        <tbody id="txBody"></tbody>
-      </table>
-    </div>
-      <div class="flex-between" style="margin-top:12px"><button id="prevTx" class="ghost">이전 거래</button><span id="txPage" class="muted"></span><button id="nextTx" class="ghost">다음 거래</button></div>
-    <div class="muted" style="font-size:12px;line-height:1.7;margin-top:8px">분류 변경은 즉시 저장됩니다. ‘같은 이름에 적용’은 모든 기간의 같은 상대방·입출금 방향에 적용합니다. 다른 계좌로 보낸 월세는 ‘고정지출’로 지정하세요.</div>
-  </div>
-
+  <details class="panel" id="advancedAnalysis"><summary>차트 · 예산 · 저축 목표</summary><div class="grid" style="margin-top:18px">
   <div id="chartNotice" role="status" class="muted" style="font-size:12px;"></div>
   <!-- Charts -->
   <div class="grid charts" id="chartsArea">
@@ -241,12 +214,41 @@
     </div>
   </div>
 
+  </div></details>
+  <details class="panel" id="dataTools"><summary>CSV 추가 · 환율 · 백업</summary><div class="grid" style="margin-top:18px">
+  <!-- Upload -->
+  <div id="drop" role="button" tabindex="0" aria-label="지출 CSV 파일 불러오기">
+    <div class="big">CSV 파일을 여기에 드래그하거나 클릭해서 선택</div>
+    <div class="small">Monzo 거래내역 CSV 지원 · 여러 달 파일을 반복해서 올리면 자동으로 누적됩니다 (중복 제거)</div>
+    <input id="file" aria-label="지출 CSV 파일" type="file" accept=".csv,text/csv" multiple class="hidden">
+  </div>
+
+  <div id="importStatus" role="status" aria-live="polite" class="muted" style="font-size:13px;line-height:1.7;"></div>
+  <div id="storageNotice" role="alert" style="color:var(--danger);font-size:13px;"></div>
+  <div class="panel" style="padding:14px;">
+    <div style="font-size:13px;font-weight:600;">파운드 · 원화 함께 보기</div>
+    <div id="fxSummary" role="status" style="font-size:13px;line-height:1.8;margin:6px 0;"></div>
+    <div class="row" style="gap:8px;font-size:13px;">
+      <label for="fxRate">1 GBP =</label><input id="fxRate" aria-label="지출 파운드 환율" type="number" min="0.000001" step="any" placeholder="원/파운드" style="width:130px;">원
+      <button id="applyFX">환율 적용</button><button id="refreshFX" class="ghost">최신 환율 조회</button>
+    </div>
+    <div id="fxError" role="alert" style="font-size:12px;color:var(--danger);margin-top:6px;"></div>
+    <div class="muted" style="font-size:12px;line-height:1.7;margin-top:6px;">원본 거래·예산·저축 입력은 GBP 기준입니다. 적용 환율로 원화를 환산하며, 거래일별 환율·실제 환전 수수료는 반영하지 않습니다. 전체 합산과 같은 환율을 사용합니다. 지출 기록은 현재 브라우저에 저장됩니다.</div>
+  </div>
+    <div class="row">
+      <button class="ghost" id="exportBtn">⬇ 백업(JSON)</button>
+      <input id="importFile" aria-label="지출 백업 JSON 파일" type="file" accept=".json" class="hidden">
+      <button class="ghost" id="importBtn">⬆ 복원</button>
+      <button class="danger" id="clearBtn">전체 삭제</button>
+    </div>
+  </div></details>
+
 
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="./spending.js?v=20261019"></script>
+<script src="./spending.js?v=20261021"></script>
 </body>
 </html>
 

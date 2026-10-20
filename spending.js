@@ -53,12 +53,12 @@ function render(){
   document.getElementById("clearBtn").disabled=!hasData&&!store.goals.length&&!Object.keys(store.budgets).length&&!store.totalBudget&&!store.management.rules.length&&!store.management.fixed.length&&!store.management.otherIncomeTransfers&&!store.management.salaryNames.length&&!Object.keys(store.management.overrides).length;
   renderManagement();renderSubscriptions();renderFlow(store.tx.filter(t=>ym(t.date)===chosen));
   if(!hasData){
-    document.getElementById("cards").innerHTML=`<div class="empty">아직 데이터가 없습니다. 위에 Monzo CSV를 올려보세요.</div>`;
+    document.getElementById("cards").innerHTML=`<div class="empty">아직 거래가 없습니다. 아래 ‘CSV 추가 · 환율 · 백업’에서 Monzo CSV를 올려주세요.</div>`;
     document.getElementById("budgetArea").innerHTML="";document.getElementById("catBudgets").innerHTML="";
     document.getElementById("txBody").innerHTML="";document.getElementById("txCount").textContent="";
     document.getElementById("insights").innerHTML="";
     renderGoals();
-    destroy();return;
+    el('dataTools').open=true;destroy();return;
   }
   const m=chosen, pm=prevMonth(m);
   const cur_tx=store.tx.filter(t=>ym(t.date)===m);
@@ -66,25 +66,13 @@ function render(){
   const curSpend=spendingOf(cur_tx), prevSpend=spendingOf(prev_tx);
   const summary=analysis.summarize(cur_tx,store.management),income=summary.income;
 
-  // cards
-  let deltaHtml="";
-  if(prevSpend>0){
-    const diff=curSpend-prevSpend, pct=(diff/prevSpend*100);
-    const cls=diff>0?"up":(diff<0?"down":"flat");
-    deltaHtml=`<div class="delta ${cls}">${diff>0?"▲":diff<0?"▼":"="} ${fmt(Math.abs(diff))} (${pct>0?"+":""}${pct.toFixed(1)}%) vs 지난 달</div>`;
-  }else deltaHtml=`<div class="delta flat">지난 달 데이터 없음</div>`;
-  let budgetCard="";
-  if(store.totalBudget){
-    const left=store.totalBudget-curSpend; const cls=left<0?"up":"down";
-    budgetCard=`<div class="panel card"><div class="label">월 목표 대비</div>
-      <div class="value">${fmt(curSpend)} <span class="muted" style="font-size:15px">/ ${fmt(store.totalBudget)}</span></div>
-      <div class="delta ${cls}">${left>=0?"남음 "+fmt(left):"초과 "+fmt(left)}</div></div>`;
-  }
-  document.getElementById("cards").innerHTML=`
-    <div class="panel card"><div class="label">이번 달 소비 지출 (${monthLabel(m)})</div><div class="value">${fmt(curSpend)}</div>${deltaHtml}</div>
-    <div class="panel card"><div class="label">이번 달 수입</div><div class="value">${fmt(income)}</div><div class="delta flat">수입−소비+환급 ${fmt(summary.surplus,true)}</div></div>
-    <div class="panel card"><div class="label">거래 건수</div><div class="value">${cur_tx.length}</div><div class="delta flat">지출 ${cur_tx.filter(consumed).length}건</div></div>
-    ${budgetCard}`;
+  const drill=(kind,text)=>`<button class="ghost" data-drill="${kind}">${text}</button>`;
+  el('cards').innerHTML=`
+    <div class="panel card"><div class="label">① 쓴 돈 · 월세 포함</div><div class="value">${fmt(curSpend)}</div><div class="hint">실제로 결제·납부한 금액이에요.<br>이체와 미분류 출금은 제외돼요.</div>
+    <div class="breakdown"><b>위 금액에 이미 포함</b><br>고정지출 ${fmt(summary.fixed)}<br>생활비·기타 소비 ${fmt(summary.variable)}</div><div class="small-actions">${drill('spending','쓴 돈 내역')}${drill('fixed','고정지출만')}</div></div>
+    <div class="panel card"><div class="label">② 번 돈 · 월급 등</div><div class="value">${fmt(income)}</div><div class="hint">급여 등 수입으로 분류된 입금이에요.<br>내 계좌 이체·환급은 제외돼요.</div><div class="small-actions">${drill('income','번 돈 내역')}</div></div>
+    <div class="panel card"><div class="label">③ 다른 내 계좌에서 옮겨온 돈</div><div class="value">${fmt(summary.transferInConfirmed)}</div><div class="hint">직접 지정한 이체와 내부이체 표시 기준.<br>번 돈에 더하지 않아요. 이체 출금은 차감하지 않았어요.</div><div class="breakdown">${summary.estimatedCount?`추정 입금 ${fmt(summary.transferInEstimated)}은 위 금액에서 제외했어요.`:'추정 입금은 따로 표시해요.'}</div><div class="small-actions">${drill('transferInConfirmed','누가 보냈는지 보기')}</div></div>`;
+  bindDrilldowns(el('cards'));
 
   destroy();
   const catMap=Object.create(null);
@@ -157,13 +145,27 @@ function changeManagement(change,message){
     const next=SpendingCore.normalize(draft);localStorage.setItem(KEY,JSON.stringify(next));store=next;undoMeta=prior;render();toast(message);return true;
   }catch(e){toast('저장하지 못했습니다. '+e.message);return false;}
 }
+function bindDrilldowns(container){
+  container.querySelectorAll?.('[data-drill]').forEach(b=>b.addEventListener('click',()=>showTransactions(b.dataset.drill)));
+}
+function showTransactions(kind){
+  kindFilter=kind;txFilter='';txPage=0;el('kindFilter').value=kind;el('search').value='';
+  el('transactionsPanel').open=true;
+  renderTx(store.tx.filter(t=>ym(t.date)===el('month').value));
+  el('transactionTitle').focus();el('transactionsPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  requestAnimationFrame(notifyParent);
+}
 function renderFlow(rows){
   const s=analysis.summarize(rows,store.management);
-  const cards=[['고정지출',s.fixed],['생활비 · 변동지출',s.variable],['내 계좌 이체 입금',s.transferIn],['내 계좌 이체 출금',s.transferOut],['환급 · 비용 정산',s.refund],['계좌 순유입 (전체 입금−출금)',s.cashNet]];
-  el('flowSummary').innerHTML=cards.map(([label,value],i)=>`<div><div class="label">${label}</div><div style="font-size:17px;font-weight:600;margin:8px 0">${fmt(value,i===5)}</div></div>`).join('');
+  const cards=[['전체 입금',s.grossIn],['전체 출금',s.grossOut],['계좌 증감 · 입금−출금',s.cashNet],['다른 계좌로 옮긴 돈',s.transferOut],['돌려받은 돈 · 환급·비용 정산',s.refund],['쓴 돈−돌려받은 돈',s.netSpend]];
+  el('flowSummary').innerHTML=cards.map(([label,value],i)=>`<div><div class="label">${label}</div><div style="font-size:17px;font-weight:600;margin:8px 0">${fmt(value,i===2||i===5)}</div></div>`).join('')+`<div class="small-actions"><button class="ghost" data-drill="refund">환급 내역</button><button class="ghost" data-drill="transferOut">이체 출금 내역</button><button class="ghost" data-drill="all">모든 입출금</button></div>`;
+  bindDrilldowns(el('flowSummary'));
   const dates=store.tx.map(t=>t.date).sort();
-  el('reviewBanner').innerHTML=(s.reviewCount?`<b>확인 필요 ${s.reviewCount}건</b> · 입금 ${fmt(s.reviewIn)} / 출금 ${fmt(s.reviewOut)}<br>소비·수입 합계에서 빠져 있습니다. 아래 거래 필터에서 분류를 확인하세요.<br>`:'선택한 달의 미분류 거래가 없습니다.<br>')+(dates.length?`입력한 거래 날짜 ${dates[0]} ~ ${dates.at(-1)} · 조회기간 전체가 포함됐는지는 원본 CSV를 확인하세요.`:'CSV를 올리면 입출금과 소비를 구분합니다.');
+  el('dataPeriod').textContent=dates.length?`입력된 거래: ${dates[0]} ~ ${dates.at(-1)} · 실제 거래일 기준으로 월을 나눠요. 월 전체 내역인지는 원본 CSV를 확인하세요.`:'CSV 거래내역을 넣으면 월별로 볼 수 있어요.';
+  el('reviewBanner').innerHTML=(s.estimatedCount?`<div><b>내 계좌 이체인지 확인할 입금 ${s.estimatedCount}건 · ${fmt(s.transferInEstimated)}</b><br>‘급여·환급 외 입금’ 규칙으로 추정했어요. ② 번 돈과 ③ 옮겨온 돈에는 포함하지 않았어요.<div class="small-actions"><button class="ghost" data-drill="transferInEstimated">보낸 사람 확인</button></div></div>`:'')+(s.reviewCount?`<div style="margin-top:8px"><b>아직 분류하지 않은 거래 ${s.reviewCount}건</b><br>입금 ${fmt(s.reviewIn)} · 출금 ${fmt(s.reviewOut)}<br>위 세 금액에서 제외돼 있어요. 지출인지 이체인지 확인해 주세요.<div class="small-actions"><button class="ghost" data-drill="review">미분류 내역 보기</button></div></div>`:'');
+  bindDrilldowns(el('reviewBanner'));
 }
+
 function renderManagement(){
   const m=store.management;
   if(document.activeElement!==el('salaryNames'))el('salaryNames').value=m.salaryNames.join('\n');
@@ -277,11 +279,14 @@ function baseOpts(o={}){return{responsive:true,maintainAspectRatio:false,
 let txFilter="";
 function renderTx(list){
   const f=txFilter.toLowerCase();
-  const rows=list.filter(t=>{const c=classification(t).kind;return (!f||(t.name+t.category+(t.notes||'')).toLowerCase().includes(f))&&(kindFilter==='all'||kindFilter==='spending'&&consumed(t)||kindFilter==='transferIn'&&c==='transfer'&&t.amount>0||kindFilter==='transferOut'&&c==='transfer'&&t.amount<0||kindFilter===c);});
+  const rows=list.filter(t=>{const result=classification(t),c=result.kind;return (!f||(t.name+t.category+(t.notes||'')).toLowerCase().includes(f))&&(kindFilter==='all'||kindFilter==='spending'&&consumed(t)||kindFilter==='transferIn'&&c==='transfer'&&t.amount>0||kindFilter==='transferInConfirmed'&&c==='transfer'&&t.amount>0&&!result.estimated||kindFilter==='transferInEstimated'&&c==='transfer'&&t.amount>0&&result.estimated||kindFilter==='transferOut'&&c==='transfer'&&t.amount<0||kindFilter===c);});
+  const incoming=['transferIn','transferInConfirmed','transferInEstimated','income','refund'].includes(kindFilter);
+  el('counterpartyHeading').textContent=incoming?'보낸 사람 / 메모':'상대방 / 내용';
+  el('transactionHelp').textContent=incoming?'CSV에 기록된 이름과 메모입니다. 이름 미기재 거래는 메모를 참고하세요. 이름만으로 실제 계좌 소유자를 확인할 수는 없어요. 은행명은 메모에 있는 경우에만 볼 수 있어요.':'금액은 원본 거래일 기준입니다. 아래에서 거래별 분류를 수정할 수 있어요.';
   const pages=Math.max(1,Math.ceil(rows.length/100));txPage=Math.min(txPage,pages-1);
   el('txCount').textContent=`(${rows.length}건)`;el('txPage').textContent=`${txPage+1} / ${pages}`;el('prevTx').disabled=txPage===0;el('nextTx').disabled=txPage===pages-1;
   const totals=analysis.summarize(rows,store.management);el('filteredSum').textContent=`필터 결과 · 입금 ${fmt(totals.grossIn)} · 출금 ${fmt(totals.grossOut)}`;
-  el('txBody').innerHTML=rows.slice(txPage*100,(txPage+1)*100).map(t=>{const c=classification(t),override=store.management.overrides[t.key];return `<tr><td>${t.date}</td><td class="tx-name">${esc(t.name)}<div class="muted">${esc(t.notes||'')}</div></td><td><span class="tag">${esc(t.category)}</span></td><td class="amt ${t.amount<0?'':'down'}">${fmt(t.amount,true)}</td><td class="tx-kind"><b>${c.label}${c.kind==='transfer'?(t.amount<0?' 출금':' 입금'):''}</b><div class="muted">${esc(c.reason)}</div><select class="changeKind" data-key="${esc(t.key)}" aria-label="${esc(t.name)} ${t.date} 거래 분류"><option value="auto" ${!override?'selected':''}>자동 분류</option>${Object.entries(analysis.labels).filter(([k])=>analysis.allowed(k,analysis.direction(t))).map(([k,v])=>`<option value="${k}" ${override===k?'selected':''}>${v}</option>`).join('')}</select><button class="ghost applyRule" data-key="${esc(t.key)}" style="font-size:12px">같은 이름에 적용</button></td></tr>`;}).join('')||'<tr><td colspan="5" class="empty">거래 없음</td></tr>';
+  el('txBody').innerHTML=rows.slice(txPage*100,(txPage+1)*100).map(t=>{const c=classification(t),override=store.management.overrides[t.key];return `<tr><td>${t.date}</td><td class="tx-name">${esc(t.counterparty===undefined?t.name:(t.counterparty||'이름 미기재'))}<div class="muted">메모: ${esc(t.notes||'없음')}</div>${t.amount>0&&t.counterparty===undefined?'<small class="muted">CSV 표시명 · 원본 이름 확인은 CSV 재업로드</small>':t.counterparty===''?'<small class="muted">보낸 사람 확인 필요</small>':''}</td><td><span class="tag">${esc(t.category)}</span></td><td class="amt ${t.amount<0?'':'down'}">${fmt(t.amount,true)}</td><td class="tx-kind"><b>${c.estimated?'추정 · ':''}${c.label}${c.kind==='transfer'?(t.amount<0?' 출금':' 입금'):''}</b><div class="muted">${esc(c.reason)}</div><select class="changeKind" data-key="${esc(t.key)}" aria-label="${esc(t.name)} ${t.date} 거래 분류"><option value="auto" ${!override?'selected':''}>자동 분류</option>${Object.entries(analysis.labels).filter(([k])=>analysis.allowed(k,analysis.direction(t))).map(([k,v])=>`<option value="${k}" ${override===k?'selected':''}>${v}</option>`).join('')}</select><button class="ghost applyRule" data-key="${esc(t.key)}" style="font-size:12px">같은 이름에 적용</button></td></tr>`;}).join('')||'<tr><td colspan="5" class="empty">거래 없음</td></tr>';
   document.querySelectorAll('.changeKind').forEach(b=>b.addEventListener('change',()=>changeManagement(m=>{if(b.value==='auto')delete m.overrides[b.dataset.key];else m.overrides[b.dataset.key]=b.value;},'거래 분류 저장됨')));
   document.querySelectorAll('.applyRule').forEach(b=>b.addEventListener('click',()=>{const t=store.tx.find(t=>t.key===b.dataset.key),kind=classification(t).kind,who=normMerchant(t.name),dir=analysis.direction(t);
     changeManagement(m=>{m.rules=m.rules.filter(r=>r.merchant!==who||r.direction!==dir);m.rules.push({merchant:who,direction:dir,kind});for(const x of store.tx)if(normMerchant(x.name)===who&&analysis.direction(x)===dir)delete m.overrides[x.key];},'같은 이름·입출금 방향의 모든 기간에 적용됨');}));

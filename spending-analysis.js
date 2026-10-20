@@ -27,7 +27,7 @@
   const active=(p,m)=>p.active&&m>=p.start&&(!p.end||m<=p.end);
   function classify(t,meta){
     const m=meta||normalize(),who=merchant(t.name),dir=direction(t),plan=m.fixed.find(p=>p.merchant===who&&active(p,t.date.slice(0,7)));
-    const result=(kind,reason,manual=false)=>({kind,label:labels[kind],reason,manual,planId:kind==='fixed'&&plan?plan.id:null});
+    const result=(kind,reason,manual=false,estimated=false)=>({kind,label:labels[kind],reason,manual,estimated,planId:kind==='fixed'&&plan?plan.id:null});
     if(t.amount===0)return result('neutral','금액 0 · 합계에서 제외');
     const override=m.overrides[t.key];if(allowed(override,dir))return result(override,'이 거래에 직접 지정',true);
     const rule=m.rules.find(r=>r.merchant===who&&r.direction===dir);if(rule)return result(rule.kind,(rule.label?rule.label+' · ':'')+'같은 상대방 분류 규칙',true);
@@ -37,7 +37,7 @@
     if(t.amount>0&&(/refund|reversal|chargeback/.test(type+' '+category)||/card payment/.test(type)||/\breimbursement\b|비용 환급/.test(words)))return result('refund','환급·비용 정산 또는 카드 결제 반환 표시');
     if(t.amount>0&&m.salaryNames.includes(who))return result('income','등록한 급여 입금 이름',true);
     if(t.amount>0&&(/^(salary|wages)$/.test(category)||/\b(salary|payroll|wages)\b|급여|월급/.test(words)))return result('income','급여 표시');
-    if(t.amount>0&&m.otherIncomeTransfers)return result('transfer','급여·환급 외 입금은 본인 이체로 지정',true);
+    if(t.amount>0&&m.otherIncomeTransfers)return result('transfer','급여·환급 외 입금 규칙으로 추정 · 보낸 사람 확인 필요',false,true);
     if(t.amount>0&&category==='income')return result('income','수입 카테고리');
     if(t.amount<0&&(/\b(rent|landlord|council tax|mortgage)\b|월세|집세/.test(words)||/^(bills|housing|rent)$/.test(category)))return result('expense','주거비·청구서 지출 · 고정 여부 확인 가능');
     if(/transfer|faster payment|bank payment|p2p/.test(type+' '+category))return result('review',t.amount<0?'송금: 본인 계좌 이동인지 실제 지출인지 확인':'입금: 본인 계좌 이동인지 실제 수입인지 확인');
@@ -45,9 +45,9 @@
     return result('review','입금 성격 확인 필요');
   }
   function summarize(tx,meta){
-    const s={spend:0,fixed:0,variable:0,income:0,refund:0,transferIn:0,transferOut:0,reviewIn:0,reviewOut:0,reviewCount:0,grossIn:0,grossOut:0};
-    for(const t of tx){const k=classify(t,meta).kind,n=Math.abs(t.amount);if(t.amount>0)s.grossIn+=n;else if(t.amount<0)s.grossOut+=n;
-      if(k==='expense'){s.variable+=n;s.spend+=n;}else if(k==='fixed'){s.fixed+=n;s.spend+=n;}else if(k==='income')s.income+=n;else if(k==='refund')s.refund+=n;else if(k==='transfer')s[t.amount<0?'transferOut':'transferIn']+=n;else if(k==='review'){s.reviewCount++;s[t.amount<0?'reviewOut':'reviewIn']+=n;}}
+    const s={spend:0,fixed:0,variable:0,income:0,refund:0,transferIn:0,transferInConfirmed:0,transferInEstimated:0,estimatedCount:0,transferOut:0,reviewIn:0,reviewOut:0,reviewCount:0,grossIn:0,grossOut:0};
+    for(const t of tx){const c=classify(t,meta),k=c.kind,n=Math.abs(t.amount);if(t.amount>0)s.grossIn+=n;else if(t.amount<0)s.grossOut+=n;
+      if(k==='expense'){s.variable+=n;s.spend+=n;}else if(k==='fixed'){s.fixed+=n;s.spend+=n;}else if(k==='income')s.income+=n;else if(k==='refund')s.refund+=n;else if(k==='transfer'){s[t.amount<0?'transferOut':'transferIn']+=n;if(t.amount>0){s[c.estimated?'transferInEstimated':'transferInConfirmed']+=n;if(c.estimated)s.estimatedCount++;}}else if(k==='review'){s.reviewCount++;s[t.amount<0?'reviewOut':'reviewIn']+=n;}}
     s.cashNet=s.grossIn-s.grossOut;s.netSpend=s.spend-s.refund;s.surplus=s.income-s.netSpend;return s;
   }
   function dueDate(m,day){const[y,mo]=m.split('-').map(Number);return m+'-'+String(Math.min(day,new Date(Date.UTC(y,mo,0)).getUTCDate())).padStart(2,'0');}

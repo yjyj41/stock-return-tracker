@@ -51,7 +51,7 @@
     out.tx=raw.tx.map(t=>{
       if(!t||!validDate(t.date)||typeof t.amount!=='number'||!Number.isFinite(t.amount)||Math.abs(t.amount)>1e14)throw new Error('거래 날짜·금액 형식을 확인하세요.');
       const key=text(t.key,'거래 식별자',5000);if(!key||keys.has(key))throw new Error('거래 식별자가 중복되거나 비어 있습니다.');keys.add(key);
-      return {key,date:t.date,amount:t.amount,name:text(t.name,'상점',1000),category:text(t.category,'카테고리',300),type:text(t.type||'','거래 종류',300),notes:text(t.notes||'','메모',3000)};
+      return {key,date:t.date,amount:t.amount,name:text(t.name,'상점',1000),category:text(t.category,'카테고리',300),type:text(t.type||'','거래 종류',300),notes:text(t.notes||'','메모',3000),...(t.counterparty!==undefined?{counterparty:text(t.counterparty,'상대방 원본 이름',1000)}:{})};
     });
     if(raw.budgets!=null&&(typeof raw.budgets!=='object'||Array.isArray(raw.budgets)))throw new Error('예산 형식을 확인하세요.');
     for(const [k,v]of Object.entries(raw.budgets||{})){text(k,'예산 카테고리',300);out.budgets[k]=positive(v,'카테고리 예산',true);}
@@ -68,7 +68,7 @@
     if(iDate<0||(iAmt<0&&iOut<0&&iIn<0))throw new Error('Date와 Amount 또는 Money Out / Money In 열이 필요합니다.');
     const iCurrency=head.findIndex(h=>['currency','account currency'].includes(String(h).trim().toLowerCase()));
     const iId=idx(head,'transaction id','id'),iCat=idx(head,'category'),iName=idx(head,'name','description','merchant','reference','counterparty'),iNotes=idx(head,'notes and #tags','notes','note'),iType=idx(head,'type');
-    const seen=new Set(store.tx.map(t=>t.key)),existing=new Map(),occurrences=new Map();let added=0,skipped=0;
+    const byKey=new Map(store.tx.map(t=>[t.key,t])),seen=new Set(byKey.keys()),existing=new Map(),occurrences=new Map();let added=0,skipped=0;
     for(const t of store.tx){const sig=signature(t);existing.set(sig,(existing.get(sig)||0)+1);}
     for(const row of rows.slice(1)){
       if(iCurrency>=0&&String(row[iCurrency]||'').trim()&&String(row[iCurrency]).trim().toUpperCase()!=='GBP')throw new Error('이 지출 탭은 GBP 계좌 기준입니다. 다른 통화의 CSV는 합칠 수 없습니다.');
@@ -79,9 +79,9 @@
       }
       if(!date||!Number.isFinite(amount))throw new Error('CSV 거래 날짜 또는 금액을 읽지 못했습니다. 원본 파일을 확인하세요.');
       const name=String(row[iName]||row[iNotes]||'기타').trim(),category=String(row[iCat]||'미분류').trim()||'미분류',type=String(row[iType]||'').trim(),notes=String(row[iNotes]||'').trim(),id=String(row[iId]||'').trim();
-      const t={date,amount,name,category,type,notes},sig=signature(t),occ=(occurrences.get(sig)||0)+1;occurrences.set(sig,occ);
+      const t={date,amount,name,category,type,notes,...(['name','counterparty'].includes(String(head[iName]||'').trim().toLowerCase())?{counterparty:String(row[iName]||'').trim()}:{})},sig=signature(t),occ=(occurrences.get(sig)||0)+1;occurrences.set(sig,occ);
       const key=id||'fallback|'+sig+'|'+occ;
-      if(seen.has(key)||(!id&&occ<=(existing.get(sig)||0))){skipped++;continue;}
+      if(seen.has(key)||(!id&&occ<=(existing.get(sig)||0))){const old=id&&byKey.get(key);if(old&&t.counterparty!==undefined&&signature(old)===sig)old.counterparty=t.counterparty;skipped++;continue;}
       seen.add(key);store.tx.push({key,...t});added++;
     }
     store.tx.sort((a,b)=>b.date.localeCompare(a.date));return {store:normalize(store),added,skipped};

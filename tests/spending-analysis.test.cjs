@@ -52,3 +52,12 @@ test('zero authorisations are visible but never unresolved money; user incoming 
  const s=a.summarize([tx('auth',0,{type:'Card payment'}),tx('own',100,{category:'Income'})],m);
  assert.equal(s.reviewCount,0);assert.equal(s.income,0);assert.equal(s.transferIn,100);assert.equal(s.cashNet,100);
 });
+
+test('broad incoming policy stays estimated; explicit sender rules confirm only their matching transfers',()=>{
+ const rows=[tx('own-a',2000,{name:'Test Owner A'}),tx('own-b',1050,{name:'Test Owner B'}),tx('unknown-shop',14.99),tx('salary',1993.44,{notes:'Salary for September'})];
+ const m=a.normalize({otherIncomeTransfers:true,rules:[{merchant:'Test Owner A',direction:'in',kind:'transfer'},{merchant:'Test Owner B',direction:'in',kind:'transfer'}]});
+ let s=a.summarize(rows,m);assert.equal(s.transferInConfirmed,3050);assert.equal(s.transferInEstimated,14.99);assert.equal(s.estimatedCount,1);assert.equal(s.income,1993.44);
+ assert.equal(s.transferIn,s.transferInConfirmed+s.transferInEstimated);assert.equal(a.classify(rows[2],m).estimated,true);
+ m.overrides['unknown-shop']='review';s=a.summarize(rows,m);assert.equal(s.transferIn,3050);assert.equal(s.reviewIn,14.99);assert.equal(s.estimatedCount,0);
+ assert.ok(Math.abs(s.cashNet-(s.surplus+s.transferIn-s.transferOut+s.reviewIn-s.reviewOut))<1e-8);
+});

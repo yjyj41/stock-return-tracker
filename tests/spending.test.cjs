@@ -107,3 +107,24 @@ test('non-GBP account exports cannot be silently mixed, while merchant local cur
   assert.throws(()=>api.mergeCSV(api.empty(),'Date,Amount,Currency\n2026-10-01,-10,USD'),/GBP/);
   assert.equal(api.mergeCSV(api.empty(),'Date,Amount,Currency,Local currency\n2026-10-01,-10,GBP,USD').store.tx[0].amount,-10);
 });
+
+test('sender provenance distinguishes empty names from notes, survives backup and enriches repeated CSV without duplicating money',()=>{
+ const csv='Transaction ID,Date,Name,Amount,Notes and #tags\na,2026-10-01,Test Owner,2000,Test Owner\nb,2026-10-02,,14.99,Market reference';
+ const store=api.mergeCSV(api.empty(),csv).store;
+ assert.equal(store.tx.find(t=>t.key==='a').counterparty,'Test Owner');assert.equal(store.tx.find(t=>t.key==='b').counterparty,'');
+ const old=api.normalize(store);for(const t of old.tx)delete t.counterparty;
+ old.management.overrides.a='transfer';const again=api.mergeCSV(old,csv);
+ assert.equal(again.added,0);assert.equal(again.store.tx.length,2);assert.equal(again.store.management.overrides.a,'transfer');
+ assert.equal(api.normalize(JSON.parse(JSON.stringify(again.store))).tx.find(t=>t.key==='b').counterparty,'');
+});
+test('transfer drilldowns separate confirmed and estimated incoming rows while preserving salary and rent totals',()=>{
+ const raw=api.mergeCSV(api.empty(),'Transaction ID,Date,Name,Amount,Notes and #tags,Type\na,2026-10-01,Test Owner,2000,,Faster payment\nb,2026-10-02,,14.99,Market reference,Faster payment\nc,2026-10-03,Employer,3000,Salary,CHAPS\nd,2026-10-04,Test Landlord,-650,Rent,Faster payment').store;
+ raw.management=require('../spending-analysis.js').normalize({otherIncomeTransfers:true,rules:[{merchant:'Test Owner',direction:'in',kind:'transfer'},{merchant:'Test Landlord',direction:'out',kind:'fixed'}]});
+ const {elements}=embeddedApp(raw);elements.get('month').value='2026-10';
+ elements.get('kindFilter').listeners.change({target:{value:'transferInConfirmed'}});
+ assert.match(elements.get('txBody').innerHTML,/Test Owner/);assert.doesNotMatch(elements.get('txBody').innerHTML,/Market reference|Employer|Test Landlord/);
+ elements.get('kindFilter').listeners.change({target:{value:'transferInEstimated'}});
+ assert.match(elements.get('txBody').innerHTML,/이름 미기재/);assert.match(elements.get('txBody').innerHTML,/Market reference/);assert.match(elements.get('txBody').innerHTML,/추정/);
+ assert.match(elements.get('cards').innerHTML,/쓴 돈 · 월세 포함/);assert.match(elements.get('cards').innerHTML,/£650.00/);assert.match(elements.get('cards').innerHTML,/£2,000.00/);assert.match(elements.get('reviewBanner').innerHTML,/£14.99/);
+ elements.get('kindFilter').listeners.change({target:{value:'spending'}});assert.match(elements.get('txBody').innerHTML,/Test Landlord/);assert.doesNotMatch(elements.get('txBody').innerHTML,/Test Owner/);
+});
