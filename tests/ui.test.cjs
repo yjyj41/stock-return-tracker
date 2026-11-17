@@ -86,3 +86,15 @@ test('an in-flight stock FX request cannot overwrite a newer rate applied in spe
   finish({rates:{GBP:{rate:1780,date:'2026-10-17',source:'Frankfurter'}},errors:[]});await pending;
   assert.equal(c.state.fxRates.GBP.rate,1900);assert.equal(c.state.fxBusy,false);
 });
+
+test('data tab hides stock, loan and spending panels and shows sign-in prompts only when asked',()=>{
+  const c=app();
+  c.state.accountScope='data';let v=c.renderVals();
+  assert.equal(v.isData,true);assert.equal(v.isAccount,false);assert.equal(v.isList,false);assert.equal(v.isAdd,false);assert.equal(v.showStockTabs,false);
+  assert.equal(v.sectionKicker,'06 Data');assert.equal(v.accountTabs.find(t=>t.key==='data').active,true);
+  assert.equal(v.acct.signedOut,true);assert.equal(v.acct.welcome,false);assert.equal(v.acct.dialog,false);
+  c.state.acct={ready:true,user:null,status:'signed-out',welcome:true};v=c.renderVals();assert.equal(v.acct.welcome,true);
+  c.state.acct={ready:true,user:{name:'Kim',email:'k@example.com'},status:'paused',prompt:'offer-upload',counts:{local:{trades:2,loans:1,loanEvents:0,spending:5}}};v=c.renderVals();
+  assert.equal(v.acct.welcome,false);assert.equal(v.acct.dialog,true);assert.equal(v.acct.initial,'K');
+  assert.deepEqual(v.acct.dialogActions.map(a=>a.label),['계정으로 옮기기','백업만 받고 빈 장부로 시작','나중에']);
+});
